@@ -58,3 +58,26 @@ export const getWalletNumbers = async (req, res) => {
     });
   }
 };
+
+// Delete a wallet number by ID
+export const deleteWalletNumber = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const deletedWallet = await WalletNumber.findByIdAndDelete(id);
+
+    if (!deletedWallet) {
+      return res.status(404).json({ message: "Wallet number not found" });
+    }
+
+    res.status(200).json({
+      message: "Wallet number deleted successfully",
+      data: deletedWallet,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Error deleting wallet number",
+      error: error.message,
+    });
+  }
+};
