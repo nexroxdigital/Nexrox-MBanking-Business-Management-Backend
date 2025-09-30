@@ -41,3 +41,20 @@ export const createWalletNumber = async (req, res) => {
     });
   }
 };
+
+// Get all wallet numbers
+export const getWalletNumbers = async (req, res) => {
+  try {
+    const wallets = await WalletNumber.find();
+
+    res.status(200).json({
+      message: "Wallet numbers fetched successfully",
+      data: wallets,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Error fetching wallet numbers",
+      error: error.message,
+    });
+  }
+};
