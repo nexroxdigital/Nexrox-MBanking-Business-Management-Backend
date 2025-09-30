@@ -2,6 +2,7 @@ import express from "express";
 import {
   createWalletNumber,
   deleteWalletNumber,
+  editWalletNumber,
   getWalletNumbers,
 } from "../controllers/walletController.js";
 
@@ -15,5 +16,8 @@ router.get("/", getWalletNumbers);
 
 // DELETE: remove a wallet number by ID
 router.delete("/delete/:id", deleteWalletNumber);
+
+// PUT: edit a wallet number by ID
+router.put("/edit/:id", editWalletNumber);
 
 export default router;

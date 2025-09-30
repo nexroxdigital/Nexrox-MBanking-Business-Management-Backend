@@ -81,3 +81,31 @@ export const deleteWalletNumber = async (req, res) => {
     });
   }
 };
+
+// Update a wallet number by ID
+export const editWalletNumber = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { label, number, channel, type, balance } = req.body;
+
+    const updatedWallet = await WalletNumber.findByIdAndUpdate(
+      id,
+      { label, number, channel, type, balance },
+      { new: true, runValidators: true } // return updated doc, respect schema rules
+    );
+
+    if (!updatedWallet) {
+      return res.status(404).json({ message: "Wallet number not found" });
+    }
+
+    res.status(200).json({
+      message: "Wallet number updated successfully",
+      data: updatedWallet,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Error updating wallet number",
+      error: error.message,
+    });
+  }
+};
