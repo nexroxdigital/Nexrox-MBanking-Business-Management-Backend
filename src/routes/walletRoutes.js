@@ -1,5 +1,6 @@
 import express from "express";
 import {
+  addWalletBalance,
   createWalletNumber,
   deleteWalletNumber,
   editWalletNumber,
@@ -19,5 +20,8 @@ router.delete("/delete/:id", deleteWalletNumber);
 
 // PUT: edit a wallet number by ID
 router.put("/edit/:id", editWalletNumber);
+
+// PATCH: adjust balance of a wallet number (increase or decrease)
+router.patch("/add-balance/:id", addWalletBalance);
 
 export default router;

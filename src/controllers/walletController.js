@@ -109,3 +109,35 @@ export const editWalletNumber = async (req, res) => {
     });
   }
 };
+
+// Adjust (increase or decrease) balance of a wallet number
+export const addWalletBalance = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { amount } = req.body;
+
+    if (amount === undefined || typeof amount !== "number") {
+      return res.status(400).json({ message: "Amount must be a number" });
+    }
+
+    const updatedWallet = await WalletNumber.findByIdAndUpdate(
+      id,
+      { $inc: { balance: amount } },
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedWallet) {
+      return res.status(404).json({ message: "Wallet number not found" });
+    }
+
+    res.status(200).json({
+      message: "Balance adjusted successfully",
+      data: updatedWallet,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Error adjusting balance",
+      error: error.message,
+    });
+  }
+};
