@@ -5,6 +5,7 @@ import express from "express";
 import connectDB from "./config/db.js";
 
 // routes
+import operatorRoutes from "./routes/operatorRoutes.js";
 import testRoutes from "./routes/testRoutes.js";
 import walletRoutes from "./routes/walletRoutes.js";
 
@@ -24,6 +25,7 @@ app.use("/api/v1", testRoutes);
 
 // Routes for wallet
 app.use("/api/wallet", walletRoutes);
+app.use("/api/operator", operatorRoutes);
 
 // Basic route
 app.get("/", (req, res) => {
