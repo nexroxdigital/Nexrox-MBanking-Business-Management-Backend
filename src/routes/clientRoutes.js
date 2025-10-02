@@ -1,8 +1,10 @@
 import express from "express";
 import {
   addNewClient,
+  adjustClientPayment,
   deleteClient,
   getClients,
+  getTransactionsByClient,
   updateClient,
 } from "../controllers/clientController.js";
 
@@ -19,5 +21,11 @@ router.delete("/delete/:id", deleteClient);
 
 // PUT: update a client (only name & phone)
 router.patch("/update/:id", updateClient);
+
+// PATCH: adjust client payment (paid & due)
+router.patch("/adjust-payment/:id", adjustClientPayment);
+
+// Get all transactions for a client
+router.get("/transaction/:id", getTransactionsByClient);
 
 export default router;

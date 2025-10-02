@@ -1,4 +1,7 @@
+import mongoose from "mongoose";
 import Client from "../models/client.js";
+import Transaction from "../models/transaction.js";
+import { sendSMS } from "../utils/smsService.js";
 
 // Create a new client
 export const addNewClient = async (req, res) => {
@@ -114,6 +117,114 @@ export const updateClient = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       message: "Error updating client",
+      error: error.message,
+    });
+  }
+};
+
+// Adjust client payment
+export const adjustClientPayment = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { id } = req.params;
+    const { amount, number, isSendMessage, message } = req.body;
+
+    if (!amount || typeof amount !== "number") {
+      return res.status(400).json({ message: "Valid amount is required" });
+    }
+
+    // Find client
+    const client = await Client.findById(id).session(session);
+    if (!client) {
+      return res.status(404).json({ message: "Client not found" });
+    }
+
+    // Adjust paid & due
+    const newPaid = client.paid + amount;
+    const newDue = client.totalSale - newPaid;
+
+    if (newDue <= 0) {
+      client.totalSale = 0;
+      client.paid = 0;
+      client.due = 0;
+    } else {
+      client.paid = newPaid;
+      client.due = newDue;
+    }
+
+    await client.save({ session });
+
+    //  Create transaction record
+    const txn = new Transaction({
+      type: "paid",
+      client: client._id,
+      clientNumber: number,
+      amount: amount,
+      note: `${amount} টাকা প্রদান করেছেন ${client.name}`,
+      meta: { action: "clientPayment" },
+    });
+
+    await txn.save({ session });
+
+    // Handle SMS
+    if (isSendMessage) {
+      const smsText =
+        message && message.trim().length > 0
+          ? message
+          : `প্রিয় ${client.name}, আপনার ${amount} টাকা গ্রহণ করা হয়েছে। বর্তমান পাওনা ${client.due} টাকা।`;
+
+      await sendSMS("+8801834529197", smsText);
+    }
+
+    // Commit transaction
+    await session.commitTransaction();
+    session.endSession();
+
+    res.status(200).json({
+      message: "Payment adjusted successfully",
+      client,
+      transaction: txn,
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+
+    res.status(500).json({
+      message: "Error processing client payment",
+      error: error.message,
+    });
+  }
+};
+
+// controllers/transactionController.js
+
+export const getTransactionsByClient = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { number, skip = 0, limit = 10 } = req.query;
+
+    let query = {};
+    if (id !== "null" || id !== "undefined") {
+      query.client = id;
+    } else if (number) {
+      query.clientNumber = number;
+    }
+
+    const transactions = await Transaction.find(query)
+      .populate("client", "name phone")
+      .sort({ createdAt: -1 })
+      .skip(Number(skip))
+      .limit(Number(limit));
+
+    res.status(200).json({
+      message: "Transactions fetched successfully",
+      data: transactions,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Error fetching transactions",
       error: error.message,
     });
   }

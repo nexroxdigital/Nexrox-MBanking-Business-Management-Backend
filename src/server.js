@@ -8,6 +8,7 @@ import connectDB from "./config/db.js";
 import bankRoutes from "./routes/bankRoutes.js";
 import clientRoutes from "./routes/clientRoutes.js";
 import operatorRoutes from "./routes/operatorRoutes.js";
+import sendMsg from "./routes/sendMsg.js";
 import testRoutes from "./routes/testRoutes.js";
 import walletRoutes from "./routes/walletRoutes.js";
 
@@ -18,6 +19,7 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Connect to DB
 connectDB();
@@ -30,6 +32,7 @@ app.use("/api/wallet", walletRoutes);
 app.use("/api/operator", operatorRoutes);
 app.use("/api/bank", bankRoutes);
 app.use("/api/client", clientRoutes);
+app.use("/api/sms", sendMsg);
 
 // Basic route
 app.get("/", (req, res) => {
