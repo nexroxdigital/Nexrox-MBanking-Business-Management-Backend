@@ -10,6 +10,7 @@ import clientRoutes from "./routes/clientRoutes.js";
 import operatorRoutes from "./routes/operatorRoutes.js";
 import sendMsg from "./routes/sendMsg.js";
 import testRoutes from "./routes/testRoutes.js";
+import transactionRoutes from "./routes/transactionRoutes.js";
 import walletRoutes from "./routes/walletRoutes.js";
 
 dotenv.config();
@@ -33,6 +34,7 @@ app.use("/api/operator", operatorRoutes);
 app.use("/api/bank", bankRoutes);
 app.use("/api/client", clientRoutes);
 app.use("/api/sms", sendMsg);
+app.use("/api/transactions", transactionRoutes);
 
 // Basic route
 app.get("/", (req, res) => {

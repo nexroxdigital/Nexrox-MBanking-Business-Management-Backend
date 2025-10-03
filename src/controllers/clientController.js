@@ -141,6 +141,11 @@ export const adjustClientPayment = async (req, res) => {
       return res.status(404).json({ message: "Client not found" });
     }
 
+    // if amount is greater than due, return error
+    if (amount > client.due) {
+      return res.status(400).json({ message: "Amount is greater than due" });
+    }
+
     // Adjust paid & due
     const newPaid = client.paid + amount;
     const newDue = client.totalSale - newPaid;
@@ -175,7 +180,7 @@ export const adjustClientPayment = async (req, res) => {
           ? message
           : `প্রিয় ${client.name}, আপনার ${amount} টাকা গ্রহণ করা হয়েছে। বর্তমান পাওনা ${client.due} টাকা।`;
 
-      await sendSMS("+8801834529197", smsText);
+      await sendSMS("8801834529197", smsText);
     }
 
     // Commit transaction
@@ -199,7 +204,6 @@ export const adjustClientPayment = async (req, res) => {
 };
 
 // controllers/transactionController.js
-
 export const getTransactionsByClient = async (req, res) => {
   try {
     const { id } = req.params;

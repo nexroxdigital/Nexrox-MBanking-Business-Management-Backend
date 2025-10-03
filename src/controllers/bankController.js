@@ -1,4 +1,6 @@
 import Bank from "../models/bank.js";
+import BankTxn from "../models/bankTxn.js";
+import Transaction from "../models/transaction.js";
 
 // Create a new bank entry
 export const addNewBank = async (req, res) => {
@@ -137,6 +139,156 @@ export const adjustBankBalance = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       message: "Error adjusting bank balance",
+      error: error.message,
+    });
+  }
+};
+
+export const createBankTransaction = async (req, res) => {
+  const session = await Bank.startSession();
+  session.startTransaction();
+
+  try {
+    const {
+      date,
+      time,
+      bank,
+      branch = "",
+      senderName,
+      senderAccount,
+      receiverName,
+      receiverAccount,
+      amount,
+      fee,
+      pay,
+    } = req.body;
+
+    // Validation
+    if (!bank || !senderName || !receiverName || !amount) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    // Find the bank account
+    const bankDoc = await Bank.findOne({
+      accountNumber: senderAccount,
+    }).session(session);
+
+    if (!bankDoc) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({ message: "অকাউন্ট পাওয়া যায়নি" });
+    }
+
+    // Calculate deduction
+    let deduction = 0;
+    if (pay) {
+      deduction = pay;
+    } else if (fee) {
+      deduction = amount + fee;
+    } else {
+      deduction = amount;
+    }
+
+    // Check balance
+    if (bankDoc.balance < deduction) {
+      await session.abortTransaction();
+      session.endSession();
+      return res
+        .status(400)
+        .json({ message: "ব্যাংক অকাউন্টে পর্যাপ্ত ব্যালেন্স নেই" });
+    }
+
+    //  Subtract from bank balance
+    bankDoc.balance -= deduction;
+    await bankDoc.save({ session });
+
+    //  Save transaction
+    const txn = new BankTxn({
+      date,
+      time,
+      bank,
+      branch,
+      senderName,
+      senderAccount,
+      receiverName,
+      receiverAccount,
+      amount,
+      fee,
+      pay,
+    });
+
+    await txn.save({ session });
+
+    // Save into Transaction collection also
+    const generalTxn = new Transaction({
+      type: "bank",
+      amount,
+      note: `${amount} টাকা পাঠানো হয়েছে ${receiverName} কে`,
+      meta: {
+        bank,
+        branch,
+        senderName,
+        senderAccount,
+        receiverName,
+        receiverAccount,
+        fee,
+        pay,
+        bankTxnId: txn._id,
+      },
+    });
+
+    await generalTxn.save({ session });
+
+    //  Commit transaction
+    await session.commitTransaction();
+    session.endSession();
+
+    res.status(201).json({
+      message: "Transaction created and bank balance updated successfully",
+      transaction: txn,
+      updatedBank: bankDoc,
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    res.status(500).json({
+      message: "Error creating bank transaction",
+      error: error.message,
+    });
+  }
+};
+
+export const getBankTransactions = async (req, res) => {
+  try {
+    let { page = 1, limit = 10 } = req.query;
+
+    page = parseInt(page);
+    limit = parseInt(limit);
+
+    const skip = (page - 1) * limit;
+
+    //  Fetch paginated transactions
+    const transactions = await BankTxn.find()
+      .sort({ createdAt: -1 }) // latest first
+      .skip(skip)
+      .limit(limit);
+
+    //  Count total for pagination
+    const total = await BankTxn.countDocuments();
+
+    res.status(200).json({
+      message: "Bank transactions fetched successfully",
+      data: transactions,
+      pagination: {
+        total,
+        page,
+        totalPages: Math.ceil(total / limit),
+        limit,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Error fetching bank transactions",
       error: error.message,
     });
   }
