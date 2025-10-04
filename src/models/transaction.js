@@ -20,6 +20,10 @@ const transactionSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    profit: {
+      type: Number,
+      default: 0,
+    },
     note: {
       type: String,
       trim: true,

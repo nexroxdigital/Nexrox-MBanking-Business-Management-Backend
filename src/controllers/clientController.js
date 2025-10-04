@@ -66,6 +66,23 @@ export const getClients = async (req, res) => {
   }
 };
 
+// Get clients with infinity scrolling
+export const getClientsSelect = async (req, res) => {
+  try {
+    const clients = await Client.find().sort({ createdAt: -1 });
+
+    res.status(200).json({
+      message: "Clients fetched successfully",
+      data: clients,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Error fetching clients",
+      error: error.message,
+    });
+  }
+};
+
 // Delete a client by ID
 export const deleteClient = async (req, res) => {
   try {

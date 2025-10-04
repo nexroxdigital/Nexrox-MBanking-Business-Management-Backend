@@ -7,6 +7,7 @@ import connectDB from "./config/db.js";
 // routes
 import bankRoutes from "./routes/bankRoutes.js";
 import clientRoutes from "./routes/clientRoutes.js";
+import dailyTxnRoutes from "./routes/dailyTxnRoutes.js";
 import operatorRoutes from "./routes/operatorRoutes.js";
 import sendMsg from "./routes/sendMsg.js";
 import testRoutes from "./routes/testRoutes.js";
@@ -34,6 +35,7 @@ app.use("/api/operator", operatorRoutes);
 app.use("/api/bank", bankRoutes);
 app.use("/api/client", clientRoutes);
 app.use("/api/sms", sendMsg);
+app.use("/api/daily-txn", dailyTxnRoutes);
 app.use("/api/transactions", transactionRoutes);
 
 // Basic route

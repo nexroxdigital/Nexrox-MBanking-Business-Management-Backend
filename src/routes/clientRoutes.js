@@ -4,6 +4,7 @@ import {
   adjustClientPayment,
   deleteClient,
   getClients,
+  getClientsSelect,
   getTransactionsByClient,
   updateClient,
 } from "../controllers/clientController.js";
@@ -27,5 +28,8 @@ router.patch("/adjust-payment/:id", adjustClientPayment);
 
 // Get all transactions for a client
 router.get("/transaction/:id", getTransactionsByClient);
+
+// get all clients with infinity scrolling
+router.get("/select", getClientsSelect);
 
 export default router;
