@@ -3,6 +3,7 @@ import Client from "../models/client.js";
 import DailyTransaction from "../models/dailyTransaction.js";
 import WalletNumber from "../models/walletNumber.js";
 import { sendSMS } from "../utils/smsService.js";
+import Transaction from "../models/transaction.js";
 
 export const createDailyTransaction = async (req, res) => {
   console.log("full body", req.body);
@@ -105,7 +106,9 @@ export const createDailyTransaction = async (req, res) => {
     } else if (type === "Cash Out") {
       shortNote = `${amount} টাকা ${type} করা হয়েছে এই নাম্বারে ${walletNumber}`;
     } else {
-      shortNote = `${total} টাকা ${type} করা হয়েছে এই নাম্বারে ${walletNumber}`;
+      shortNote = `${total} টাকা ${type} করা হয়েছে ${
+        clientNumber ? `এই নাম্বারে ${clientNumber}}` : ""
+      }`;
     }
 
     const txn = new Transaction({

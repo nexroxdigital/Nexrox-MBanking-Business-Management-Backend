@@ -51,6 +51,10 @@ const dailyTransactionSchema = new mongoose.Schema(
       type: Number,
       required: false,
     },
+    paid: {
+      type: Number,
+      required: false,
+    },
     profit: {
       type: Number,
       default: 0,
