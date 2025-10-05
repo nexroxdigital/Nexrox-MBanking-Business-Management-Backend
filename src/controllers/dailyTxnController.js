@@ -229,7 +229,7 @@ export const getWalletWiseReport = async (req, res) => {
       if (!reportMap.has(walletId)) {
         reportMap.set(walletId, {
           wallet: {
-            id: walletId,
+            _id: walletId,
             label: wallet.label,
             number: wallet.number,
             type: wallet.type,
