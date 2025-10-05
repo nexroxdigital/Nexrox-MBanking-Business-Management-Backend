@@ -6,7 +6,6 @@ import WalletNumber from "../models/walletNumber.js";
 import { sendSMS } from "../utils/smsService.js";
 
 export const createDailyTransaction = async (req, res) => {
-  // console.log("full body", req.body);
   const session = await mongoose.startSession();
   session.startTransaction();
 
@@ -120,13 +119,16 @@ export const createDailyTransaction = async (req, res) => {
       }`;
     }
 
-    console.log("due", due);
+    let txnAmount = 0;
+    if (type === "Cash Out") txnAmount = amount;
+    else if (type === "Cash In") txnAmount = total;
+    else txnAmount = amount;
 
     const txn = new Transaction({
       type,
       client: client_id || null,
       clientNumber: clientNumber || null,
-      amount: type === "Cash Out" ? amount : total,
+      amount: txnAmount,
       profit,
       due: due || 0,
       note: shortNote,
