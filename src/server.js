@@ -5,6 +5,7 @@ import express from "express";
 import connectDB from "./config/db.js";
 
 // routes
+import loginUser from "./routes/authRoutes.js";
 import bankRoutes from "./routes/bankRoutes.js";
 import clientRoutes from "./routes/clientRoutes.js";
 import dailyTxnRoutes from "./routes/dailyTxnRoutes.js";
@@ -30,6 +31,7 @@ connectDB();
 app.use("/api/v1", testRoutes);
 
 // Routes for wallet
+app.use("/api/auth", loginUser);
 app.use("/api/wallet", walletRoutes);
 app.use("/api/operator", operatorRoutes);
 app.use("/api/bank", bankRoutes);

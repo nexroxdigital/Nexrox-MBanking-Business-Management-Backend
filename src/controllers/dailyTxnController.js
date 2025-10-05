@@ -1,12 +1,12 @@
 import mongoose from "mongoose";
 import Client from "../models/client.js";
 import DailyTransaction from "../models/dailyTransaction.js";
+import Transaction from "../models/transaction.js";
 import WalletNumber from "../models/walletNumber.js";
 import { sendSMS } from "../utils/smsService.js";
-import Transaction from "../models/transaction.js";
 
 export const createDailyTransaction = async (req, res) => {
-  console.log("full body", req.body);
+  // console.log("full body", req.body);
   const session = await mongoose.startSession();
   session.startTransaction();
 
@@ -15,6 +15,7 @@ export const createDailyTransaction = async (req, res) => {
       date,
       channel,
       wallet_id,
+      txn_id,
       client_id,
       client_name,
       number,
@@ -43,7 +44,13 @@ export const createDailyTransaction = async (req, res) => {
       if (type === "Cash Out") {
         walletDoc.balance += amount;
       } else if (type === "Cash In") {
-        walletDoc.balance -= total || amount;
+        const deduction = total || amount;
+
+        if (walletDoc.balance < deduction) {
+          throw new Error("insufficient wallet balance");
+        }
+
+        walletDoc.balance -= deduction;
       }
 
       await walletDoc.save({ session });
@@ -76,6 +83,7 @@ export const createDailyTransaction = async (req, res) => {
       date,
       channel,
       wallet_id,
+      txn_id,
       client_id,
       client_name,
       number,
@@ -89,6 +97,7 @@ export const createDailyTransaction = async (req, res) => {
       due,
       note,
       bill_type,
+      wallet_balance: walletDoc ? walletDoc.balance : null,
     });
 
     await dailyTxn.save({ session });
@@ -111,12 +120,15 @@ export const createDailyTransaction = async (req, res) => {
       }`;
     }
 
+    console.log("due", due);
+
     const txn = new Transaction({
       type,
       client: client_id || null,
-      clientNumber,
-      amount,
+      clientNumber: clientNumber || null,
+      amount: type === "Cash Out" ? amount : total,
       profit,
+      due: due || 0,
       note: shortNote,
     });
 
@@ -139,6 +151,15 @@ export const createDailyTransaction = async (req, res) => {
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
+
+    // handle specific business errors
+    if (error.message === "insufficient wallet balance") {
+      return res.status(400).json({
+        message: "ওয়ালেটে পর্যাপ্ত ব্যালেন্স নেই",
+        error: error.message,
+      });
+    }
+
     res.status(500).json({
       message: "Error creating daily transaction",
       error: error.message,
@@ -158,7 +179,8 @@ export const getDailyTransactions = async (req, res) => {
 
     // Fetch transactions with pagination
     const transactions = await DailyTransaction.find()
-      .populate("client_id", "name phone") // if you want client info
+      .populate("client_id", "name phone")
+      .populate("wallet_id", "label number channel type") // if you want client info
       .sort({ createdAt: -1 }) // latest first
       .skip(skip)
       .limit(limit);
@@ -178,6 +200,70 @@ export const getDailyTransactions = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       message: "Error fetching transactions",
+      error: error.message,
+    });
+  }
+};
+
+export const getWalletWiseReport = async (req, res) => {
+  try {
+    const today = new Date().toISOString().split("T")[0];
+
+    // 1️⃣ Fetch today's transactions that have wallet_id
+    const transactions = await DailyTransaction.find({
+      date: today,
+      wallet_id: { $exists: true, $ne: null },
+    }).populate("wallet_id", "label number type");
+
+    // 2️⃣ Group by wallet_id
+    const reportMap = new Map();
+
+    transactions.forEach((txn) => {
+      const wallet = txn.wallet_id;
+      if (!wallet) return; // skip if no wallet
+
+      const walletId = wallet._id.toString();
+
+      if (!reportMap.has(walletId)) {
+        reportMap.set(walletId, {
+          wallet: {
+            id: walletId,
+            label: wallet.label,
+            number: wallet.number,
+            type: wallet.type,
+          },
+          txnCount: 0,
+          totalTxnAmount: 0,
+        });
+      }
+
+      const report = reportMap.get(walletId);
+
+      // Count transactions
+      report.txnCount += 1;
+
+      // Add amount based on wallet type
+      if (wallet.type.toLowerCase() === "agent") {
+        report.totalTxnAmount += txn.amount;
+      } else if (wallet.type.toLowerCase() === "personal") {
+        report.totalTxnAmount += txn.total || txn.amount;
+      }
+
+      reportMap.set(walletId, report);
+    });
+
+    // 3️⃣ Convert map to array
+    const result = Array.from(reportMap.values());
+
+    res.status(200).json({
+      message: "Wallet-wise report for today",
+      date: today,
+      count: result.length,
+      data: result,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Error generating wallet report",
       error: error.message,
     });
   }

@@ -8,12 +8,16 @@ const dailyTransactionSchema = new mongoose.Schema(
     },
     channel: {
       type: String,
-      required: true,
+      required: false,
       trim: true,
     },
     wallet_id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "WalletNumber",
+      required: false,
+    },
+    txn_id: {
+      type: String,
       required: false,
     },
     client_id: {
