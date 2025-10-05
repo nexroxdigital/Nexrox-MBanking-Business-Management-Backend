@@ -37,14 +37,17 @@ export const getTodaysTransactionReport = async (req, res) => {
       createdAt: { $gte: startOfDay, $lte: endOfDay },
     });
 
+    //  Filter out bank transactions for calculation
+    const nonBankTxns = transactions.filter((txn) => txn.type?.toLowerCase() !== "bank");
+
     //  Calculate totals
-    const totalSale = transactions
+    const totalSale = nonBankTxns
       .reduce((sum, txn) => sum + txn.amount, 0)
       .toFixed(2);
-    const totalProfit = transactions
+    const totalProfit = nonBankTxns
       .reduce((sum, txn) => sum + txn.profit, 0)
       .toFixed(2);
-    const totalDue = transactions
+    const totalDue = nonBankTxns
       .reduce((sum, txn) => sum + txn.due, 0)
       .toFixed(2);
 
@@ -78,16 +81,19 @@ export const getRunningMonthReport = async (req, res) => {
       createdAt: { $gte: firstDayOfMonth, $lte: today },
     });
 
+     //  Filter out bank transactions for calculation
+    const nonBankTxns = transactions.filter((txn) => txn.type?.toLowerCase() !== "bank");
+
     // 3Calculate totals with two decimal precision
-    const totalSale = transactions
+    const totalSale = nonBankTxns
       .reduce((sum, txn) => sum + (txn.amount || 0), 0)
       .toFixed(2);
 
-    const totalProfit = transactions
+    const totalProfit = nonBankTxns
       .reduce((sum, txn) => sum + (txn.profit || 0), 0)
       .toFixed(2);
 
-    const totalDue = transactions
+    const totalDue = nonBankTxns
       .reduce((sum, txn) => sum + (txn.due || 0), 0)
       .toFixed(2);
 
@@ -125,10 +131,15 @@ export const getLast30DaysReport = async (req, res) => {
       createdAt: { $gte: lastMonth, $lte: today },
     }).lean();
 
+
+     //  Filter out bank transactions for calculation
+    const nonBankTxns = transactions.filter((txn) => txn.type?.toLowerCase() !== "bank");
+
+
     // 3️⃣ Group by date (YYYY-MM-DD)
     const grouped = {};
 
-    transactions.forEach((txn) => {
+    nonBankTxns.forEach((txn) => {
       const dateKey = new Date(txn.createdAt).toISOString().split("T")[0];
 
       if (!grouped[dateKey]) {
