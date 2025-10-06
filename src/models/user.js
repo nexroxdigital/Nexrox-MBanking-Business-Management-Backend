@@ -15,6 +15,10 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: "admin",
   },
+  image: {
+    type: String,
+    default: "https://i.postimg.cc/15ndmBW5/images.png"
+  },
 });
 
 // Hash the password before saving
