@@ -18,7 +18,7 @@ const transactionSchema = new mongoose.Schema(
     },
     amount: {
       type: Number,
-      required: true,
+      required: false,
     },
     profit: {
       type: Number,

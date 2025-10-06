@@ -38,17 +38,19 @@ export const getTodaysTransactionReport = async (req, res) => {
     });
 
     //  Filter out bank transactions for calculation
-    const nonBankTxns = transactions.filter((txn) => txn.type?.toLowerCase() !== "bank");
+    const nonBankTxns = transactions.filter(
+      (txn) => txn.type?.toLowerCase() !== "bank"
+    );
 
     //  Calculate totals
     const totalSale = nonBankTxns
-      .reduce((sum, txn) => sum + txn.amount, 0)
+      .reduce((sum, txn) => sum + Number(txn.amount || 0), 0)
       .toFixed(2);
     const totalProfit = nonBankTxns
-      .reduce((sum, txn) => sum + txn.profit, 0)
+      .reduce((sum, txn) => sum + Number(txn.profit || 0), 0)
       .toFixed(2);
     const totalDue = nonBankTxns
-      .reduce((sum, txn) => sum + txn.due, 0)
+      .reduce((sum, txn) => sum + Number(txn.due || 0), 0)
       .toFixed(2);
 
     //  Send response
@@ -81,8 +83,10 @@ export const getRunningMonthReport = async (req, res) => {
       createdAt: { $gte: firstDayOfMonth, $lte: today },
     });
 
-     //  Filter out bank transactions for calculation
-    const nonBankTxns = transactions.filter((txn) => txn.type?.toLowerCase() !== "bank");
+    //  Filter out bank transactions for calculation
+    const nonBankTxns = transactions.filter(
+      (txn) => txn.type?.toLowerCase() !== "bank"
+    );
 
     // 3Calculate totals with two decimal precision
     const totalSale = nonBankTxns
@@ -131,10 +135,10 @@ export const getLast30DaysReport = async (req, res) => {
       createdAt: { $gte: lastMonth, $lte: today },
     }).lean();
 
-
-     //  Filter out bank transactions for calculation
-    const nonBankTxns = transactions.filter((txn) => txn.type?.toLowerCase() !== "bank");
-
+    //  Filter out bank transactions for calculation
+    const nonBankTxns = transactions.filter(
+      (txn) => txn.type?.toLowerCase() !== "bank"
+    );
 
     // 3️⃣ Group by date (YYYY-MM-DD)
     const grouped = {};

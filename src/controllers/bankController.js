@@ -1,9 +1,13 @@
+import mongoose from "mongoose";
 import Bank from "../models/bank.js";
 import BankTxn from "../models/bankTxn.js";
 import Transaction from "../models/transaction.js";
 
 // Create a new bank entry
 export const addNewBank = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
     const { bank, branch, routingNo, accountName, accountNumber, balance } =
       req.body;
@@ -22,13 +26,30 @@ export const addNewBank = async (req, res) => {
       balance: balance || 0,
     });
 
-    await newBank.save();
+    await newBank.save({ session });
+
+    const txn = new Transaction({
+      type: "create bank",
+      note: "নতুন ব্যাংক যুক্ত করা হয়েছে",
+      amount: null,
+      profit: null,
+      due: null,
+    });
+
+    await txn.save({ session });
+
+    //  Commit transaction
+    await session.commitTransaction();
+    session.endSession();
 
     res.status(201).json({
       message: "Bank saved successfully",
       data: newBank,
     });
   } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+
     res.status(400).json({
       message: "Error saving bank",
       error: error.message,
@@ -86,7 +107,7 @@ export const updateBank = async (req, res) => {
     const updatedBank = await Bank.findByIdAndUpdate(
       id,
       { bank, branch, routingNo, accountName, accountNumber, balance },
-      { new: true, runValidators: true } // return updated doc & apply schema validators
+      { new: true, runValidators: true }
     );
 
     if (!updatedBank) {
@@ -107,6 +128,9 @@ export const updateBank = async (req, res) => {
 
 // Adjust (increase or decrease) bank balance with validation
 export const adjustBankBalance = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
     const { id } = req.params;
     const { amount } = req.body; // positive = deposit, negative = withdraw
@@ -130,13 +154,29 @@ export const adjustBankBalance = async (req, res) => {
 
     // Update balance
     bank.balance = newBalance;
-    await bank.save();
+    await bank.save({ session });
+
+    const txn = new Transaction({
+      type: "bank",
+      note: "ব্যাংক ব্যালেন্স আপডেট করা হয়েছে",
+      amount: amount,
+      profit: null,
+      due: null,
+    });
+    await txn.save({ session });
+
+    //  Commit transaction
+    await session.commitTransaction();
+    session.endSession();
 
     res.status(200).json({
       message: "Bank balance adjusted successfully",
       data: bank,
     });
   } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+
     res.status(500).json({
       message: "Error adjusting bank balance",
       error: error.message,
@@ -145,7 +185,7 @@ export const adjustBankBalance = async (req, res) => {
 };
 
 export const createBankTransaction = async (req, res) => {
-  const session = await Bank.startSession();
+  const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
@@ -255,6 +295,8 @@ export const createBankTransaction = async (req, res) => {
       message: "Error creating bank transaction",
       error: error.message,
     });
+  } finally {
+    session.endSession();
   }
 };
 

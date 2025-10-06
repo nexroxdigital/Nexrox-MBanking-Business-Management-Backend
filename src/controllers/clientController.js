@@ -5,6 +5,9 @@ import { sendSMS } from "../utils/smsService.js";
 
 // Create a new client
 export const addNewClient = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
     const { name, phone, totalSale, paid, due } = req.body;
 
@@ -21,13 +24,30 @@ export const addNewClient = async (req, res) => {
       due: due || 0,
     });
 
-    await newClient.save();
+    await newClient.save({ session });
+
+    const txn = new Transaction({
+      type: "client add",
+      note: "নতুন ক্লাইন্ট যোগ করা হয়েছে",
+      amount: null,
+      profit: null,
+      due: null,
+    });
+
+    await txn.save({ session });
+
+    //  Commit transaction
+    await session.commitTransaction();
+    session.endSession();
 
     res.status(201).json({
       message: "Client created successfully",
       data: newClient,
     });
   } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+
     res.status(400).json({
       message: "Error creating client",
       error: error.message,

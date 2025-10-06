@@ -1,7 +1,12 @@
+import mongoose from "mongoose";
+import Transaction from "../models/transaction.js";
 import WalletNumber from "../models/walletNumber.js";
 
 // Create and save a new wallet number
 export const createWalletNumber = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
     const { label, number, channel, type } = req.body;
 
@@ -28,13 +33,30 @@ export const createWalletNumber = async (req, res) => {
       balance: 0,
     });
 
-    await newWalletNumber.save();
+    await newWalletNumber.save({ session });
+
+    const txn = new Transaction({
+      type: "wallet",
+      note: "নতুন ওয়ালেট যোগ করা হয়েছে",
+      amount: null,
+      profit: null,
+      due: null,
+    });
+
+    await txn.save({ session });
+
+    //  Commit transaction
+    await session.commitTransaction();
+    session.endSession();
 
     res.status(201).json({
       message: "Wallet number created successfully",
       data: newWalletNumber,
     });
   } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+
     res.status(400).json({
       message: "Error creating wallet number",
       error: error.message,
@@ -112,6 +134,9 @@ export const editWalletNumber = async (req, res) => {
 
 // Adjust (increase or decrease) balance of a wallet number
 export const addWalletBalance = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
     const { id } = req.params;
     const { amount } = req.body;
@@ -123,18 +148,35 @@ export const addWalletBalance = async (req, res) => {
     const updatedWallet = await WalletNumber.findByIdAndUpdate(
       id,
       { $inc: { balance: amount } },
-      { new: true, runValidators: true }
+      { new: true, runValidators: true, session }
     );
 
     if (!updatedWallet) {
       return res.status(404).json({ message: "Wallet number not found" });
     }
 
+    const txn = new Transaction({
+      type: "bank",
+      note: "ওয়ালেট ব্যালেন্স আপডেট করা হয়েছে",
+      amount: amount || 0,
+      profit: null,
+      due: null,
+    });
+
+    await txn.save({ session });
+
+    //  Commit transaction
+    await session.commitTransaction();
+    session.endSession();
+
     res.status(200).json({
       message: "Balance adjusted successfully",
       data: updatedWallet,
     });
   } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+
     res.status(500).json({
       message: "Error adjusting balance",
       error: error.message,

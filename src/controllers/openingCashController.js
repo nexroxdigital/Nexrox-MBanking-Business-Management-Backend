@@ -1,4 +1,6 @@
+import mongoose from "mongoose";
 import OpeningCash from "../models/openingCash.js";
+import Transaction from "../models/transaction.js";
 
 // Get today's opening cash
 export const getTodayOpeningCash = async (req, res) => {
@@ -20,7 +22,9 @@ export const getTodayOpeningCash = async (req, res) => {
 
 // Set or update today's opening cash
 export const setOpeningCash = async (req, res) => {
-  // console.log(req.body);
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
     const today = new Date().toISOString().split("T")[0];
     const { amount } = req.body;
@@ -28,11 +32,28 @@ export const setOpeningCash = async (req, res) => {
     let opening = await OpeningCash.findOneAndUpdate(
       { date: today },
       { amount },
-      { new: true, upsert: true }
+      { new: true, upsert: true, session }
     );
+
+    const txn = new Transaction({
+      type: "bank",
+      note: "opening ক্যাশ আপডেট করা হয়েছে",
+      amount: amount,
+      profit: null,
+      due: null,
+    });
+
+    await txn.save({ session });
+
+    //  Commit transaction
+    await session.commitTransaction();
+    session.endSession();
 
     res.json({ success: true, data: opening });
   } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+
     res.status(500).json({ success: false, message: err.message });
   }
 };
