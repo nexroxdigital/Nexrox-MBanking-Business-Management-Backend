@@ -9,6 +9,7 @@ import loginUser from "./routes/authRoutes.js";
 import bankRoutes from "./routes/bankRoutes.js";
 import clientRoutes from "./routes/clientRoutes.js";
 import dailyTxnRoutes from "./routes/dailyTxnRoutes.js";
+import openingCashRoutes from "./routes/openingCashRoutes.js";
 import operatorRoutes from "./routes/operatorRoutes.js";
 import sendMsg from "./routes/sendMsg.js";
 import transactionRoutes from "./routes/transactionRoutes.js";
@@ -35,6 +36,7 @@ app.use("/api/client", clientRoutes);
 app.use("/api/sms", sendMsg);
 app.use("/api/daily-txn", dailyTxnRoutes);
 app.use("/api/transactions", transactionRoutes);
+app.use("/api/opening-cash", openingCashRoutes);
 
 // Basic route
 app.get("/", (req, res) => {
