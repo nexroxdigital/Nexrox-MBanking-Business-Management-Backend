@@ -11,7 +11,6 @@ import clientRoutes from "./routes/clientRoutes.js";
 import dailyTxnRoutes from "./routes/dailyTxnRoutes.js";
 import operatorRoutes from "./routes/operatorRoutes.js";
 import sendMsg from "./routes/sendMsg.js";
-import testRoutes from "./routes/testRoutes.js";
 import transactionRoutes from "./routes/transactionRoutes.js";
 import walletRoutes from "./routes/walletRoutes.js";
 
@@ -26,9 +25,6 @@ app.use(express.urlencoded({ extended: true }));
 
 // Connect to DB
 connectDB();
-
-// Routes for articles
-app.use("/api/v1", testRoutes);
 
 // Routes for wallet
 app.use("/api/auth", loginUser);

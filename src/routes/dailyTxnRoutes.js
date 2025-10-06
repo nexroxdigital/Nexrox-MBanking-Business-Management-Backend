@@ -4,16 +4,18 @@ import {
   getDailyTransactions,
   getWalletWiseReport,
 } from "../controllers/dailyTxnController.js";
+import { verifyAdmin } from "../middleware/verifyAdmin.js";
+import { verifyToken } from "../middleware/verifyToken.js";
 
 const router = express.Router();
 
 // Create a daily transaction
-router.post("/create", createDailyTransaction);
+router.post("/create", verifyToken, verifyAdmin, createDailyTransaction);
 
 // get all transactions
-router.get("/", getDailyTransactions);
+router.get("/", verifyToken, verifyAdmin, getDailyTransactions);
 
 // GET number-wise report for today
-router.get("/wallet-report", getWalletWiseReport);
+router.get("/wallet-report", verifyToken, verifyAdmin, getWalletWiseReport);
 
 export default router;

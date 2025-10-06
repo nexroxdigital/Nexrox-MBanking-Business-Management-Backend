@@ -6,22 +6,24 @@ import {
   editWalletNumber,
   getWalletNumbers,
 } from "../controllers/walletController.js";
+import { verifyAdmin } from "../middleware/verifyAdmin.js";
+import { verifyToken } from "../middleware/verifyToken.js";
 
 const router = express.Router();
 
 // POST: create a wallet number
-router.post("/create", createWalletNumber);
+router.post("/create", verifyToken, verifyAdmin, createWalletNumber);
 
 // GET: get all wallet numbers
-router.get("/", getWalletNumbers);
+router.get("/", verifyToken, verifyAdmin, getWalletNumbers);
 
 // DELETE: remove a wallet number by ID
-router.delete("/delete/:id", deleteWalletNumber);
+router.delete("/delete/:id", verifyToken, verifyAdmin, deleteWalletNumber);
 
 // PUT: edit a wallet number by ID
-router.put("/edit/:id", editWalletNumber);
+router.put("/edit/:id", verifyToken, verifyAdmin, editWalletNumber);
 
 // PATCH: adjust balance of a wallet number (increase or decrease)
-router.patch("/add-balance/:id", addWalletBalance);
+router.patch("/add-balance/:id", verifyToken, verifyAdmin, addWalletBalance);
 
 export default router;
