@@ -115,7 +115,7 @@ export const createDailyTransaction = async (req, res) => {
       shortNote = `${amount} টাকা ${type} করা হয়েছে এই নাম্বারে ${walletNumber}`;
     } else {
       shortNote = `${total} টাকা ${type} করা হয়েছে ${
-        clientNumber ? `এই নাম্বারে ${clientNumber}}` : ""
+        clientNumber ? `এই নাম্বারে ${clientNumber}` : ""
       }`;
     }
 
