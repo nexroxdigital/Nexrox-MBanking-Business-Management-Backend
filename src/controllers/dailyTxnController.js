@@ -211,18 +211,19 @@ export const getWalletWiseReport = async (req, res) => {
   try {
     const today = new Date().toISOString().split("T")[0];
 
-    // 1️⃣ Fetch today's transactions that have wallet_id
+    // Fetch today's transactions that have wallet_id
     const transactions = await DailyTransaction.find({
       date: today,
       wallet_id: { $exists: true, $ne: null },
     }).populate("wallet_id", "label number type");
 
-    // 2️⃣ Group by wallet_id
+    //  Group by wallet_id
     const reportMap = new Map();
 
     transactions.forEach((txn) => {
+      // console.log("txn", typeof txn.total);
       const wallet = txn.wallet_id;
-      if (!wallet) return; // skip if no wallet
+      if (!wallet) return;
 
       const walletId = wallet._id.toString();
 
@@ -244,6 +245,8 @@ export const getWalletWiseReport = async (req, res) => {
       // Count transactions
       report.txnCount += 1;
 
+      // console.log("Wallet Type:", wallet.type);
+
       // Add amount based on wallet type
       if (wallet.type.toLowerCase() === "agent") {
         report.totalTxnAmount += txn.amount;
@@ -254,8 +257,10 @@ export const getWalletWiseReport = async (req, res) => {
       reportMap.set(walletId, report);
     });
 
-    // 3️⃣ Convert map to array
+    // Convert map to array
     const result = Array.from(reportMap.values());
+
+    // console.log(result);
 
     res.status(200).json({
       message: "Wallet-wise report for today",

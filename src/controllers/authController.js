@@ -41,7 +41,7 @@ export const loginUser = async (req, res) => {
 export const updateUserImage = async (req, res) => {
   try {
     const userId = req.user.id;
-    console.log("userid,", userId);
+    // console.log("userid,", userId);
 
     const { image } = req.body;
 

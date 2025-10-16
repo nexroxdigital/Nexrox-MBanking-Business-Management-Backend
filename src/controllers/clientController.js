@@ -168,6 +168,8 @@ export const adjustClientPayment = async (req, res) => {
     const { id } = req.params;
     const { amount, isSendMessage, message } = req.body;
 
+    // console.log("id", id);
+
     // console.log("client number in adjust balance", number);
 
     if (!amount || typeof amount !== "number") {
@@ -206,7 +208,7 @@ export const adjustClientPayment = async (req, res) => {
     const txn = new Transaction({
       type: "paid",
       client: client._id,
-      clientNumber: number,
+      clientNumber: client.phone,
       amount: amount,
       note: `${amount} টাকা প্রদান করেছেন ${client.name}`,
       meta: { action: "clientPayment" },
