@@ -166,7 +166,9 @@ export const adjustClientPayment = async (req, res) => {
 
   try {
     const { id } = req.params;
-    const { amount, number, isSendMessage, message } = req.body;
+    const { amount, isSendMessage, message } = req.body;
+
+    // console.log("client number in adjust balance", number);
 
     if (!amount || typeof amount !== "number") {
       return res.status(400).json({ message: "Valid amount is required" });
@@ -174,6 +176,8 @@ export const adjustClientPayment = async (req, res) => {
 
     // Find client
     const client = await Client.findById(id).session(session);
+
+    // console.log("client in adjust balance", client);
     if (!client) {
       return res.status(404).json({ message: "Client not found" });
     }
@@ -217,7 +221,7 @@ export const adjustClientPayment = async (req, res) => {
           ? message
           : `প্রিয় ${client.name}, আপনার ${amount} টাকা গ্রহণ করা হয়েছে। বর্তমান পাওনা ${client.due} টাকা।`;
 
-      await sendSMS(number, smsText);
+      await sendSMS(client.phone, smsText);
     }
 
     // Commit transaction
