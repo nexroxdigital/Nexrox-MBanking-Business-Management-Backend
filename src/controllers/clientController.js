@@ -217,7 +217,7 @@ export const adjustClientPayment = async (req, res) => {
           ? message
           : `প্রিয় ${client.name}, আপনার ${amount} টাকা গ্রহণ করা হয়েছে। বর্তমান পাওনা ${client.due} টাকা।`;
 
-      await sendSMS("8801834529197", smsText);
+      await sendSMS(number, smsText);
     }
 
     // Commit transaction
