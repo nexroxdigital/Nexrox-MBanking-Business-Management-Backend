@@ -9,7 +9,7 @@ const walletNumberSchema = new mongoose.Schema({
   number: {
     type: String,
     required: true,
-    unique: true,
+    // unique: true,
   },
   channel: {
     type: String,

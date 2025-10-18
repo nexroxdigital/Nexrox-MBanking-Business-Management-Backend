@@ -187,3 +187,87 @@ export const getLast30DaysReport = async (req, res) => {
     });
   }
 };
+
+export const deleteTransaction = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const transaction = await Transaction.findByIdAndDelete(id);
+
+    if (!transaction) {
+      return res.status(404).json({
+        success: false,
+        message: "Transaction not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Transaction deleted successfully",
+      data: transaction,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Error deleting transaction",
+      error: error.message,
+    });
+  }
+};
+
+import mongoose from "mongoose";
+
+
+export const updateTransaction = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid transaction ID format",
+      });
+    }
+
+    // Find and update the transaction
+    const updatedTransaction = await Transaction.findByIdAndUpdate(
+      id,
+      { $set: updateData },
+      {
+        new: true, // Return updated document
+        runValidators: true, // Run schema validators
+      }
+    );
+
+    if (!updatedTransaction) {
+      return res.status(404).json({
+        success: false,
+        message: "Transaction not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Transaction updated successfully",
+      data: updatedTransaction,
+    });
+  } catch (error) {
+    console.error("Error updating transaction:", error);
+
+    // Handle validation errors
+    if (error.name === "ValidationError") {
+      return res.status(400).json({
+        success: false,
+        message: "Validation error",
+        error: error.message,
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+};

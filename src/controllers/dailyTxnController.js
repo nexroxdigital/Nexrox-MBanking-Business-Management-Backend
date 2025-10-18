@@ -32,24 +32,33 @@ export const createDailyTransaction = async (req, res) => {
       message,
     } = req.body;
 
+    console.log(req.body);
+
     //  1. Handle Wallet update
     let walletDoc = null;
     if (wallet_id) {
       walletDoc = await WalletNumber.findById(wallet_id).session(session);
+
       if (!walletDoc) {
         throw new Error("Wallet not found");
       }
 
       if (type === "Cash Out") {
-        walletDoc.balance += amount;
+        walletDoc.balance += total;
       } else if (type === "Cash In") {
-        const deduction = total || amount;
+        const deduction = amount;
 
         if (walletDoc.balance < deduction) {
           throw new Error("insufficient wallet balance");
         }
 
         walletDoc.balance -= deduction;
+        walletDoc.balance += profit;
+      } else if (type.toLowerCase() === "receive money") {
+        walletDoc.balance += total;
+      } else if (type.toLowerCase() === "send money") {
+        walletDoc.balance -= amount;
+        walletDoc.balance += profit;
       }
 
       await walletDoc.save({ session });
@@ -73,6 +82,12 @@ export const createDailyTransaction = async (req, res) => {
         // Increase due by new due
         clientDoc.due += due;
 
+        await clientDoc.save({ session });
+      }
+      if (type.toLowerCase() === "cash" && amount > 0) {
+        clientDoc.totalSale += amount;
+
+        clientDoc.due += amount;
         await clientDoc.save({ session });
       }
     }
@@ -102,7 +117,7 @@ export const createDailyTransaction = async (req, res) => {
     await dailyTxn.save({ session });
 
     // 4. Save Transaction
-    let clientNumber = clientDoc ? clientDoc.phone : null;
+    let clientNumber = clientDoc ? clientDoc.phone : number || null;
     let walletNumber = walletDoc ? walletDoc.number : null;
 
     let shortNote = "";
@@ -113,23 +128,37 @@ export const createDailyTransaction = async (req, res) => {
       shortNote = `${total} টাকা ${bill_type} করা হয়েছে`;
     } else if (type === "Cash Out") {
       shortNote = `${amount} টাকা ${type} করা হয়েছে এই নাম্বারে ${walletNumber}`;
-    } else {
-      shortNote = `${total} টাকা ${type} করা হয়েছে ${
+    } else if (type === "Cash In") {
+      if (walletDoc?.type.toLowerCase() === "agent") {
+        shortNote = `${walletDoc?.label} থেকে ${amount} টাকা cash in করা হয়েছে।`;
+      } else {
+        shortNote = `${amount} টাকা ${type} করা হয়েছে ${
+          clientNumber ? `এই নাম্বারে ${clientNumber}` : ""
+        }`;
+      }
+    } else if (type.toLowerCase() === "receive money") {
+      shortNote = `${total} টাকা ${type} হয়েছে এই নাম্বারে ${walletNumber}`;
+    } else if (type.toLowerCase() === "send money") {
+      shortNote = `${amount} টাকা ${type} করা হয়েছে ${
         clientNumber ? `এই নাম্বারে ${clientNumber}` : ""
       }`;
+    } else if (type.toLowerCase() === "cash") {
+      shortNote = `৳{clientDoc?.name} কে ${amount} টাকা দেওয়া হয়েছে।`;
     }
 
-    let txnAmount = 0;
-    if (type === "Cash Out") txnAmount = amount;
-    else if (type === "Cash In") txnAmount = total;
-    else txnAmount = amount;
+    // let txnAmount = 0;
+    // if (type === "Cash Out") txnAmount = total;
+    // else if (type === "Cash In") txnAmount = amount;
+    // else if (type.toLowerCase() === "receive money") txnAmount = total;
+    // else if (type.toLowerCase() === "send money") txnAmount = amount;
+    // else txnAmount = amount;
 
     const txn = new Transaction({
       type,
       client: client_id || null,
       clientNumber: clientNumber || null,
-      amount: txnAmount,
-      profit,
+      amount: amount || 0,
+      profit: profit || 0,
       due: due || 0,
       note: shortNote,
     });
