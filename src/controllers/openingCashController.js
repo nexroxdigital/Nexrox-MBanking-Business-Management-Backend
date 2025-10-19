@@ -3,35 +3,50 @@ import OpeningCash from "../models/openingCash.js";
 import Transaction from "../models/transaction.js";
 
 // Get today's opening cash
+
+// Backend - getTodayOpeningCash controller
 export const getTodayOpeningCash = async (req, res) => {
   try {
     const today = new Date().toISOString().split("T")[0];
 
-    let opening = await OpeningCash.findOne({ date: today });
+    const opening = await OpeningCash.findOne({ date: today });
 
-    // If not found, create new with 0 automatically
     if (!opening) {
-      opening = await OpeningCash.create({ date: today, amount: 0 });
+      return res.json({
+        success: true,
+        data: {
+          amount: 0,
+          denominations: null,
+        },
+      });
     }
 
-    res.json({ success: true, data: opening });
+    res.json({
+      success: true,
+      data: {
+        amount: opening.amount,
+        denominations: opening.denominations,
+      },
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 };
 
-// Set or update today's opening cash
 export const setOpeningCash = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
     const today = new Date().toISOString().split("T")[0];
-    const { amount } = req.body;
+    const { amount, denominations } = req.body; // Get denominations from request
 
     let opening = await OpeningCash.findOneAndUpdate(
       { date: today },
-      { amount },
+      {
+        amount,
+        denominations: denominations || [], // Save denominations breakdown
+      },
       { new: true, upsert: true, session }
     );
 
@@ -45,7 +60,7 @@ export const setOpeningCash = async (req, res) => {
 
     await txn.save({ session });
 
-    //  Commit transaction
+    // Commit transaction
     await session.commitTransaction();
     session.endSession();
 

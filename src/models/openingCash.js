@@ -11,6 +11,27 @@ const openingCashSchema = new mongoose.Schema({
     required: true,
     default: 0,
   },
+  denominations: [
+    {
+      value: {
+        type: Number,
+        required: true,
+      },
+      count: {
+        type: Number,
+        required: true,
+        default: 0,
+      },
+      enabled: {
+        type: Boolean,
+        default: true,
+      },
+      custom: {
+        type: Boolean,
+        default: false,
+      },
+    },
+  ],
 });
 
 const OpeningCash = mongoose.model("OpeningCash", openingCashSchema);
