@@ -32,7 +32,7 @@ export const createDailyTransaction = async (req, res) => {
       message,
     } = req.body;
 
-    console.log(req.body);
+    // console.log(req.body);
 
     //  1. Handle Wallet update
     let walletDoc = null;
@@ -74,10 +74,21 @@ export const createDailyTransaction = async (req, res) => {
 
       if (due > 0) {
         // Increase totalSale by total
-        clientDoc.totalSale += total;
-
-        // Increase paid by (total - newDue)
-        clientDoc.paid += total - due;
+        if (
+          type.toLowerCase() === "cash in" ||
+          type.toLowerCase() === "send money"
+        ) {
+          clientDoc.totalSale += total;
+          // Increase paid by (total - newDue)
+          clientDoc.paid += total - due;
+        } else if (
+          type.toLowerCase() === "receive money" ||
+          type.toLowerCase() === "cash out"
+        ) {
+          clientDoc.totalSale += amount;
+          // Increase paid by (amount - newDue)
+          clientDoc.paid += amount - due;
+        }
 
         // Increase due by new due
         clientDoc.due += due;
@@ -92,33 +103,10 @@ export const createDailyTransaction = async (req, res) => {
       }
     }
 
-    //  3. Save DailyTransaction
-    const dailyTxn = new DailyTransaction({
-      date,
-      channel,
-      wallet_id,
-      txn_id,
-      client_id,
-      client_name,
-      number,
-      type,
-      amount,
-      fee,
-      cost,
-      total,
-      profit,
-      refund,
-      due,
-      note,
-      bill_type,
-      wallet_balance: walletDoc ? walletDoc.balance : null,
-    });
-
-    await dailyTxn.save({ session });
-
     // 4. Save Transaction
     let clientNumber = clientDoc ? clientDoc.phone : number || null;
     let walletNumber = walletDoc ? walletDoc.number : null;
+
 
     let shortNote = "";
 
@@ -146,13 +134,6 @@ export const createDailyTransaction = async (req, res) => {
       shortNote = `৳{clientDoc?.name} কে ${amount} টাকা দেওয়া হয়েছে।`;
     }
 
-    // let txnAmount = 0;
-    // if (type === "Cash Out") txnAmount = total;
-    // else if (type === "Cash In") txnAmount = amount;
-    // else if (type.toLowerCase() === "receive money") txnAmount = total;
-    // else if (type.toLowerCase() === "send money") txnAmount = amount;
-    // else txnAmount = amount;
-
     const txn = new Transaction({
       type,
       client: client_id || null,
@@ -164,6 +145,40 @@ export const createDailyTransaction = async (req, res) => {
     });
 
     await txn.save({ session });
+
+    //  3. Save DailyTransaction
+    const dailyTxn = new DailyTransaction({
+      date,
+      channel,
+      wallet_id,
+      txn_id,
+      client_id,
+      client_name,
+      number,
+      type,
+      amount,
+      fee,
+      cost,
+      total,
+      profit,
+      refund,
+      due,
+      note,
+      bill_type,
+      wallet_balance: walletDoc ? walletDoc.balance : null,
+      transaction_id: txn._id,
+    });
+
+    await dailyTxn.save({ session });
+
+    
+
+    // let txnAmount = 0;
+    // if (type === "Cash Out") txnAmount = total;
+    // else if (type === "Cash In") txnAmount = amount;
+    // else if (type.toLowerCase() === "receive money") txnAmount = total;
+    // else if (type.toLowerCase() === "send money") txnAmount = amount;
+    // else txnAmount = amount;
 
     //  5. Send SMS if needed
     if (isSendMessage && clientNumber) {
@@ -300,6 +315,85 @@ export const getWalletWiseReport = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       message: "Error generating wallet report",
+      error: error.message,
+    });
+  }
+};
+
+// delete daily transaction history
+
+export const deleteDailyTransaction = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { id } = req.params;
+
+    // 1. Find the daily transaction
+    const dailyTxn = await DailyTransaction.findById(id).session(session);
+    if (!dailyTxn) {
+      return res.status(404).json({ message: "Daily transaction not found" });
+    }
+
+    // 2. Revert Wallet changes
+    if (dailyTxn.wallet_id) {
+      const wallet = await WalletNumber.findById(dailyTxn.wallet_id).session(
+        session
+      );
+      if (wallet) {
+        const type = dailyTxn.type.toLowerCase();
+
+        if (type === "cash out") {
+          wallet.balance -= dailyTxn.total;
+        } else if (type === "cash in") {
+          wallet.balance += dailyTxn.amount;
+          wallet.balance -= dailyTxn.profit || 0;
+        } else if (type === "receive money") {
+          wallet.balance -= dailyTxn.total;
+        } else if (type === "send money") {
+          wallet.balance += dailyTxn.amount;
+          wallet.balance -= dailyTxn.profit || 0;
+        }
+
+        await wallet.save({ session });
+      }
+    }
+
+    // 3. Revert Client changes
+    if (dailyTxn.client_id) {
+      const client = await Client.findById(dailyTxn.client_id).session(session);
+      if (client) {
+        if (dailyTxn.due > 0) {
+          client.totalSale -= dailyTxn.total || 0;
+          client.paid -= dailyTxn.total - dailyTxn.due || 0;
+          client.due -= dailyTxn.due || 0;
+        }
+        if (dailyTxn.type.toLowerCase() === "cash" && dailyTxn.amount > 0) {
+          client.totalSale -= dailyTxn.amount;
+          client.due -= dailyTxn.amount;
+        }
+        await client.save({ session });
+      }
+    }
+
+    // 4. Delete linked general transaction
+    if (dailyTxn.transaction_id) {
+      await Transaction.findByIdAndDelete(dailyTxn.transaction_id).session(session);
+    }
+
+    // 5. Delete the daily transaction itself
+    await DailyTransaction.findByIdAndDelete(id).session(session);
+
+    // 6. Commit
+    await session.commitTransaction();
+    session.endSession();
+
+    res.status(200).json({ message: "Daily transaction deleted successfully" });
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    res.status(500).json({
+      message: "Error deleting daily transaction",
       error: error.message,
     });
   }

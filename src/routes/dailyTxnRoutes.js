@@ -1,6 +1,7 @@
 import express from "express";
 import {
   createDailyTransaction,
+  deleteDailyTransaction,
   getDailyTransactions,
   getWalletWiseReport,
 } from "../controllers/dailyTxnController.js";
@@ -17,5 +18,8 @@ router.get("/", verifyToken, verifyAdmin, getDailyTransactions);
 
 // GET number-wise report for today
 router.get("/wallet-report", verifyToken, verifyAdmin, getWalletWiseReport);
+
+// delete daily txn
+router.delete("/delete/:id", verifyToken, verifyAdmin, deleteDailyTransaction);
 
 export default router;

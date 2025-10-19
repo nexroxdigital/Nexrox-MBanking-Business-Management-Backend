@@ -198,10 +198,15 @@ export const createBankTransaction = async (req, res) => {
       senderAccount,
       receiverName,
       receiverAccount,
+      receiverBank,
+      receiverBankBranch,
+      method,
       amount,
       fee,
       pay,
     } = req.body;
+
+    console.log(req.body);
 
     // Validation
     if (!bank || !senderName || !receiverName || !amount) {
@@ -252,6 +257,9 @@ export const createBankTransaction = async (req, res) => {
       senderAccount,
       receiverName,
       receiverAccount,
+      receiverBank,
+      receiverBankBranch,
+      method,
       amount,
       fee,
       pay,
@@ -333,5 +341,219 @@ export const getBankTransactions = async (req, res) => {
       message: "Error fetching bank transactions",
       error: error.message,
     });
+  }
+};
+
+// delete bank transaction
+export const deleteBankTxn = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { id } = req.params; // Transaction ID from URL params
+
+    // Find the bank transaction
+    const bankTxn = await BankTxn.findById(id).session(session);
+
+    if (!bankTxn) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({ message: "লেনদেন পাওয়া যায়নি" });
+    }
+
+    // Find the bank account
+    const bankDoc = await Bank.findOne({
+      accountNumber: bankTxn.senderAccount,
+    }).session(session);
+
+    if (!bankDoc) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({ message: "ব্যাংক অকাউন্ট পাওয়া যায়নি" });
+    }
+
+    // Calculate the amount to restore (same logic as deduction in create)
+    let amountToRestore = 0;
+    if (bankTxn.pay) {
+      amountToRestore = bankTxn.pay;
+    } else if (bankTxn.fee) {
+      amountToRestore = bankTxn.amount + bankTxn.fee;
+    } else {
+      amountToRestore = bankTxn.amount;
+    }
+
+    // Restore the bank balance
+    bankDoc.balance += amountToRestore;
+    await bankDoc.save({ session });
+
+    // Delete the related general Transaction record
+    const deletedGeneralTxn = await Transaction.findOneAndDelete(
+      { "meta.bankTxnId": bankTxn._id },
+      { session }
+    );
+
+    // Delete the bank transaction
+    await BankTxn.findByIdAndDelete(id).session(session);
+
+    // Commit transaction
+    await session.commitTransaction();
+    session.endSession();
+
+    res.status(200).json({
+      message:
+        "লেনদেন সফলভাবে মুছে ফেলা হয়েছে এবং ব্যাংক ব্যালেন্স পুনরুদ্ধার করা হয়েছে",
+      deletedBankTxn: bankTxn,
+      restoredAmount: amountToRestore,
+      updatedBank: bankDoc,
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    res.status(500).json({
+      message: "লেনদেন মুছতে সমস্যা হয়েছে",
+      error: error.message,
+    });
+  } finally {
+    session.endSession();
+  }
+};
+
+// edit bank transaction
+export const editBankTransaction = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { id: txnId } = req.params;
+    // Transaction ID from URL
+    const updates = req.body; // Updated transaction data from client
+
+    // 1️⃣ Find the original transaction
+    const originalTxn = await BankTxn.findById(txnId).session(session);
+    if (!originalTxn) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({ message: "Transaction not found" });
+    }
+
+    // 2️⃣ Get original sender account and its bank document
+    const oldBankDoc = await Bank.findOne({
+      accountNumber: originalTxn.senderAccount,
+    }).session(session);
+    if (!oldBankDoc) {
+      await session.abortTransaction();
+      session.endSession();
+      return res
+        .status(404)
+        .json({ message: "Original bank account not found" });
+    }
+
+    // 3️⃣ Undo the old transaction’s deduction from old account balance
+    const oldDeduction =
+      originalTxn.pay ||
+      (originalTxn.fee
+        ? originalTxn.amount + originalTxn.fee
+        : originalTxn.amount);
+
+    oldBankDoc.balance += oldDeduction;
+    await oldBankDoc.save({ session });
+
+    // 4️⃣ Determine the new sender account (could be same or changed)
+    const newSenderAccount = updates.senderAccount || originalTxn.senderAccount;
+
+    // 5️⃣ Fetch the new sender’s bank document
+    const newBankDoc = await Bank.findOne({
+      accountNumber: newSenderAccount,
+    }).session(session);
+
+    if (!newBankDoc) {
+      await session.abortTransaction();
+      session.endSession();
+      return res
+        .status(404)
+        .json({ message: "New sender bank account not found" });
+    }
+
+    // 6️⃣ Calculate new deduction amount (based on updated fields)
+    const newAmount = updates.amount ?? originalTxn.amount;
+    const newFee = updates.fee ?? originalTxn.fee ?? 0;
+    const newPay = updates.pay ?? originalTxn.pay ?? 0;
+
+    let newDeduction = 0;
+    if (newPay) newDeduction = newPay;
+    else if (newFee) newDeduction = newAmount + newFee;
+    else newDeduction = newAmount;
+
+    // 7️⃣ Check if new account has enough balance
+    if (newBankDoc.balance < newDeduction) {
+      await session.abortTransaction();
+      session.endSession();
+      return res
+        .status(400)
+        .json({ message: "Insufficient balance in new sender account" });
+    }
+
+    // 8️⃣ Deduct new transaction amount from new bank account
+    newBankDoc.balance -= newDeduction;
+    await newBankDoc.save({ session });
+
+    // 9️⃣ Update the transaction fields
+    for (let key in updates) {
+      if (updates[key] !== undefined) {
+        originalTxn[key] = updates[key];
+      }
+    }
+
+    await originalTxn.save({ session });
+
+    // 🔟 Update the related general Transaction document (if exists)
+    let generalTxn = null;
+
+    if (mongoose.Types.ObjectId.isValid(txnId)) {
+      generalTxn = await Transaction.findOne({
+        "meta.bankTxnId": new mongoose.Types.ObjectId(txnId),
+      }).session(session);
+    }
+
+    console.log("general", generalTxn);
+
+    if (generalTxn) {
+      generalTxn.amount = newAmount;
+      generalTxn.note = `${newAmount} টাকা পাঠানো হয়েছে ${
+        updates.receiverName ?? originalTxn.receiverName
+      } কে`;
+
+      generalTxn.meta = {
+        ...generalTxn.meta,
+        ...updates,
+        bankTxnId: originalTxn._id,
+      };
+
+      await generalTxn.save({ session });
+    }
+
+    // 11️⃣ Commit transaction
+    await session.commitTransaction();
+    session.endSession();
+
+    // 12️⃣ Send response
+    res.status(200).json({
+      message: "Transaction updated successfully",
+      updatedTransaction: originalTxn,
+      updatedBank:
+        newSenderAccount === originalTxn.senderAccount
+          ? newBankDoc
+          : { oldBank: oldBankDoc, newBank: newBankDoc },
+    });
+  } catch (error) {
+    // Rollback if any error occurs
+    await session.abortTransaction();
+    session.endSession();
+    res.status(500).json({
+      message: "Error updating bank transaction",
+      error: error.message,
+    });
+  } finally {
+    session.endSession();
   }
 };

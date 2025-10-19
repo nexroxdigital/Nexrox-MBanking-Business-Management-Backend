@@ -40,6 +40,21 @@ const bankTransactionSchema = new mongoose.Schema(
       required: false,
       trim: true,
     },
+    receiverBank: {
+      type: String,
+      required: false,
+      trim: true,
+    },
+    receiverBankBranch: {
+      type: String,
+      required: false,
+      trim: true,
+    },
+    method: {
+      type: String,
+      required: false,
+      trim: true,
+    },
     amount: {
       type: Number,
       required: true,

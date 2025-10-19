@@ -203,18 +203,6 @@ export const createRecharge = async (req, res) => {
     operator.balance -= rechargeAmount;
     await operator.save({ session });
 
-    // Create recharge history with the updated balance
-    const newRecharge = new RechargeTxn({
-      date,
-      senderNumber,
-      receiverNumber,
-      rechargeAmount,
-      balance: operator.balance,
-      operator: operator._id,
-    });
-
-    await newRecharge.save({ session });
-
     const txn = new Transaction({
       type: "recharge",
       note: `এই ${receiverNumber} নম্বরে রিচার্জ করা হয়েছে`,
@@ -224,6 +212,19 @@ export const createRecharge = async (req, res) => {
     });
 
     await txn.save({ session });
+
+    // Create recharge history with the updated balance
+    const newRecharge = new RechargeTxn({
+      date,
+      senderNumber,
+      receiverNumber,
+      rechargeAmount,
+      balance: operator.balance,
+      operator: operator._id,
+      transaction: txn._id,
+    });
+
+    await newRecharge.save({ session });
 
     //  Commit transaction
     await session.commitTransaction();
@@ -273,6 +274,164 @@ export const getRechargeRecords = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       message: "Error fetching recharge histories",
+      error: error.message,
+    });
+  }
+};
+
+// delete recharge transaction
+export const deleteRechargeTxn = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { id } = req.params; // recharge transaction id
+
+    //  Validate input
+    if (!id) {
+      return res
+        .status(400)
+        .json({ message: "Recharge transaction ID is required" });
+    }
+
+    // 2 Find the recharge record (with session)
+    const recharge = await RechargeTxn.findById(id).session(session);
+    if (!recharge) {
+      return res.status(404).json({ message: "Recharge record not found" });
+    }
+
+    // Find the related operator
+    const operator = await Operator.findById(recharge.operator).session(
+      session
+    );
+    if (!operator) {
+      return res.status(404).json({ message: "Operator not found" });
+    }
+
+    //  Reverse the recharge effect on operator balance
+    operator.balance += recharge.rechargeAmount;
+    await operator.save({ session });
+
+    //  Delete the related transaction
+    if (recharge.transaction) {
+      await Transaction.deleteOne({ _id: recharge.transaction }).session(
+        session
+      );
+    }
+
+    // 6Delete the recharge record itself
+    await RechargeTxn.deleteOne({ _id: id }).session(session);
+
+    // Commit transaction
+    await session.commitTransaction();
+    session.endSession();
+
+    res.status(200).json({
+      message: "Recharge transaction deleted successfully",
+      deletedRechargeId: id,
+    });
+  } catch (error) {
+    // Rollback on error
+    await session.abortTransaction();
+    session.endSession();
+
+    res.status(400).json({
+      message: "Error deleting recharge transaction",
+      error: error.message,
+    });
+  }
+};
+
+export const editRechargeTransaction = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { id } = req.params;
+    const { date, senderNumber, receiverNumber, rechargeAmount } = req.body;
+
+    // 1️⃣ Basic validation
+    if (!date || !senderNumber || !receiverNumber || !rechargeAmount) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+
+    // 2️⃣ Find existing recharge transaction
+    const rechargeTxn = await RechargeTxn.findById(id)
+      .populate("operator")
+      .session(session);
+
+    if (!rechargeTxn) {
+      return res
+        .status(404)
+        .json({ message: "Recharge transaction not found" });
+    }
+
+    // 3️⃣ Get the old operator
+    const oldOperator = await Operator.findById(
+      rechargeTxn.operator._id
+    ).session(session);
+
+    // 4️⃣ Reverse old recharge (refund)
+    oldOperator.balance += rechargeTxn.rechargeAmount;
+    await oldOperator.save({ session });
+
+    // 5️⃣ Find new operator by senderNumber
+    const newOperator = await Operator.findOne({
+      number: senderNumber,
+    }).session(session);
+
+    // console.log("new ope", newOperator);
+
+    if (!newOperator) {
+      throw new Error("New operator not found");
+    }
+
+    // 6️⃣ Check balance before deduction
+    if (newOperator.balance < rechargeAmount) {
+      throw new Error("Insufficient operator balance for update");
+    }
+
+    // 7️⃣ Deduct new amount from new operator
+    newOperator.balance -= rechargeAmount;
+    await newOperator.save({ session });
+
+    // 8️⃣ Update Recharge Transaction
+    rechargeTxn.set({
+      date,
+      senderNumber,
+      receiverNumber,
+      rechargeAmount,
+      balance: newOperator.balance,
+      operator: newOperator._id,
+      transaction: rechargeTxn.transaction,
+    });
+
+    await rechargeTxn.save({ session });
+
+    // 9️⃣ Update related general Transaction
+    const txn = await Transaction.findById(rechargeTxn.transaction).session(
+      session
+    );
+
+    if (txn) {
+      txn.amount = rechargeAmount;
+      txn.note = `এই ${receiverNumber} নম্বরে রিচার্জ করা হয়েছে`;
+      await txn.save({ session });
+    }
+
+    // 🔟 Commit transaction
+    await session.commitTransaction();
+    session.endSession();
+
+    res.status(200).json({
+      message: "Recharge transaction updated successfully",
+      data: rechargeTxn,
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    res.status(400).json({
+      message: "Error updating recharge transaction",
       error: error.message,
     });
   }

@@ -4,6 +4,8 @@ import {
   createOperator,
   createRecharge,
   deleteOperator,
+  deleteRechargeTxn,
+  editRechargeTransaction,
   getOperators,
   getRechargeRecords,
   updateOperator,
@@ -39,5 +41,21 @@ router.post("/create-recharge", verifyToken, verifyAdmin, createRecharge);
 
 // GET: fetch all recharge history entries
 router.get("/recharge-records", verifyToken, verifyAdmin, getRechargeRecords);
+
+// delete recharge transactions
+router.delete(
+  "/delete-recharge/:id",
+  verifyToken,
+  verifyAdmin,
+  deleteRechargeTxn
+);
+
+// edit and update recharge txn
+router.put(
+  "/update-recharge/:id",
+  verifyToken,
+  verifyAdmin,
+  editRechargeTransaction
+);
 
 export default router;

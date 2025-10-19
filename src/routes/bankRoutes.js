@@ -4,6 +4,8 @@ import {
   adjustBankBalance,
   createBankTransaction,
   deleteBank,
+  deleteBankTxn,
+  editBankTransaction,
   getBanks,
   getBankTransactions,
   updateBank,
@@ -43,5 +45,21 @@ router.post(
 
 // Get all bank transactions (with pagination)
 router.get("/transactions", verifyToken, verifyAdmin, getBankTransactions);
+
+// In your routes file
+router.delete(
+  "/delete-transaction/:id",
+  verifyToken,
+  verifyAdmin,
+  deleteBankTxn
+);
+
+// edit bank txn
+router.put(
+  "/edit-transaction/:id",
+  verifyToken,
+  verifyAdmin,
+  editBankTransaction
+);
 
 export default router;

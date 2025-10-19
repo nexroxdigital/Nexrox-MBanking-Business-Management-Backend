@@ -79,7 +79,13 @@ const dailyTransactionSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    transaction_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Transaction",
+      required: true,
+    },
   },
+
   {
     timestamps: true,
     collection: "daily_transactions",

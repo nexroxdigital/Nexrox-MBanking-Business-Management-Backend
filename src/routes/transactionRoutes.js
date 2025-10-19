@@ -29,9 +29,9 @@ router.get("/monthly-report", verifyToken, verifyAdmin, getRunningMonthReport);
 // last 30 day's report
 router.get("/last-30-days", verifyToken, verifyAdmin, getLast30DaysReport);
 
-router.delete("/delete/:id", deleteTransaction);
+router.delete("/delete/:id", verifyToken, verifyAdmin, deleteTransaction);
 
 // update transactions
-router.patch("/update/:id", updateTransaction);
+router.patch("/update/:id", verifyToken, verifyAdmin, updateTransaction);
 
 export default router;

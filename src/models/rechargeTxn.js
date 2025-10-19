@@ -27,7 +27,12 @@ const rechargeSchema = new mongoose.Schema(
     },
     operator: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Operator", // ✅ reference Operator collection
+      ref: "Operator",
+      required: true,
+    },
+    transaction: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Transaction",
       required: true,
     },
   },
