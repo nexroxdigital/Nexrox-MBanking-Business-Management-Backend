@@ -515,7 +515,7 @@ export const editBankTransaction = async (req, res) => {
       }).session(session);
     }
 
-    console.log("general", generalTxn);
+    // console.log("general", generalTxn);
 
     if (generalTxn) {
       generalTxn.amount = newAmount;
