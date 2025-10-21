@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import LoadHistory from "../models/loadHistory.js";
 import Operator from "../models/operatorModel.js";
 import RechargeTxn from "../models/rechargeTxn.js";
 import Transaction from "../models/transaction.js";
@@ -128,7 +129,7 @@ export const adjustOperatorBalance = async (req, res) => {
 
   try {
     const { id } = req.params;
-    const { amount } = req.body; // positive = increase, negative = decrease
+    const { amount, date } = req.body; // positive = increase, negative = decrease
 
     if (amount === undefined || typeof amount !== "number") {
       return res.status(400).json({ message: "Amount must be a number" });
@@ -152,6 +153,16 @@ export const adjustOperatorBalance = async (req, res) => {
       due: null,
     });
     await txn.save({ session });
+
+    const loadHistory = new LoadHistory({
+      date: date || new Date(),
+      amount: amount,
+      operator: id,
+      newBalance: updatedOperator.balance,
+      transaction: txn._id,
+    });
+
+    await loadHistory.save({ session });
 
     //  Commit transaction
     await session.commitTransaction();
@@ -432,6 +443,271 @@ export const editRechargeTransaction = async (req, res) => {
     session.endSession();
     res.status(400).json({
       message: "Error updating recharge transaction",
+      error: error.message,
+    });
+  }
+};
+
+// get load history controller with pagination
+
+export const getLoadHistory = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 5;
+    const skip = (page - 1) * limit;
+
+    // Fetch paginated load histories
+    const histories = await LoadHistory.find()
+      .populate("operator", "name number balance")
+      .sort({ date: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    // Count total documents for pagination
+    const totalRecords = await LoadHistory.countDocuments();
+
+    res.status(200).json({
+      message: "Load histories fetched successfully",
+      data: histories,
+      pagination: {
+        total: totalRecords,
+        page,
+        limit,
+        totalPages: Math.ceil(totalRecords / limit),
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Error fetching load histories",
+      error: error.message,
+    });
+  }
+};
+
+// delete load history
+
+export const deleteLoadHistory = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { id } = req.params; // load history ID
+
+    // Find the load history
+    const loadHistory = await LoadHistory.findById(id).session(session);
+    if (!loadHistory) {
+      return res.status(404).json({ message: "Load history not found" });
+    }
+
+    const { amount, operator, transaction: txnId } = loadHistory;
+
+    // Reverse the operator balance
+    const updatedOperator = await Operator.findByIdAndUpdate(
+      operator,
+      { $inc: { balance: -amount } }, // reverse the load amount
+      { new: true, session }
+    );
+
+    if (!updatedOperator) {
+      return res.status(404).json({ message: "Operator not found" });
+    }
+
+    // Delete the associated transaction
+    if (txnId) {
+      await Transaction.findByIdAndDelete(txnId).session(session);
+    }
+
+    // Delete the load history
+    await LoadHistory.findByIdAndDelete(id).session(session);
+
+    await session.commitTransaction();
+    session.endSession();
+
+    res.status(200).json({
+      message: `Load history deleted: ${
+        amount > 0 ? "reversed deposit" : "reversed deduction"
+      }`,
+      data: updatedOperator,
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+
+    res.status(500).json({
+      message: "Error deleting load history",
+      error: error.message,
+    });
+  }
+};
+
+// edit laod history
+
+// export const editLoadHistory = async (req, res) => {
+//   const session = await mongoose.startSession();
+//   session.startTransaction();
+
+//   try {
+//     const { id } = req.params; // LoadHistory document ID
+//     const { amount, date, operator } = req.body; // New amount and optional date
+
+//     if (amount === undefined || typeof amount !== "number") {
+//       return res.status(400).json({ message: "Amount must be a number" });
+//     }
+
+//     // 1️⃣ Find existing LoadHistory
+//     const existing = await LoadHistory.findById(id).session(session);
+//     if (!existing) {
+//       return res.status(404).json({ message: "Load history not found" });
+//     }
+
+//     // 2️⃣ Calculate delta: difference between new and old amount
+//     // Positive delta → increase operator balance
+//     // Negative delta → decrease operator balance
+//     const delta = amount - existing.amount;
+
+//     // 3️⃣ Update operator balance by delta
+//     const updatedOperator = await Operator.findByIdAndUpdate(
+//       existing.operator,
+//       { $inc: { balance: delta } },
+//       { new: true, runValidators: true, session }
+//     );
+
+//     if (!updatedOperator) {
+//       return res.status(404).json({ message: "Operator not found" });
+//     }
+
+//     // 4️⃣ Update LoadHistory document with new amount, date, and new operator balance
+//     existing.amount = amount;
+//     existing.date = date || existing.date;
+//     existing.newBalance = updatedOperator.balance;
+
+//     await existing.save({ session });
+
+//     if (existing.transaction) {
+//       await Transaction.findByIdAndUpdate(
+//         existing.transaction,
+//         {
+//           amount: amount,
+//           note: `অপারেটর ব্যালেন্স আপডেট করা হয়েছে`,
+//         },
+//         { session }
+//       );
+//     }
+
+//     // 5️⃣ Commit transaction
+//     await session.commitTransaction();
+//     session.endSession();
+
+//     res.status(200).json({
+//       message: "Load history updated successfully",
+//       data: existing,
+//     });
+//   } catch (error) {
+//     await session.abortTransaction();
+//     session.endSession();
+
+//     res.status(500).json({
+//       message: "Error updating load history",
+//       error: error.message,
+//     });
+//   }
+// };
+
+export const editLoadHistory = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { id } = req.params; // LoadHistory document ID
+    const { amount, date, operator: newOperatorId } = req.body; // New amount, date, and optional new operator
+
+    if (amount === undefined || typeof amount !== "number") {
+      return res.status(400).json({ message: "Amount must be a number" });
+    }
+
+    // 1️⃣ Find existing LoadHistory
+    const existing = await LoadHistory.findById(id).session(session);
+    if (!existing) {
+      return res.status(404).json({ message: "Load history not found" });
+    }
+
+    const oldOperatorId = existing.operator.toString();
+
+    // 2️⃣ Update balances
+    let updatedOperator;
+
+    if (newOperatorId && newOperatorId !== oldOperatorId) {
+      // Operator changed
+      // 2a. Revert old operator's balance
+      const revertedOldOperator = await Operator.findByIdAndUpdate(
+        oldOperatorId,
+        { $inc: { balance: -existing.amount } },
+        { new: true, session }
+      );
+
+      if (!revertedOldOperator) {
+        return res.status(404).json({ message: "Old operator not found" });
+      }
+
+      // 2b. Apply amount to new operator's balance
+      updatedOperator = await Operator.findByIdAndUpdate(
+        newOperatorId,
+        { $inc: { balance: amount } },
+        { new: true, session }
+      );
+
+      if (!updatedOperator) {
+        return res.status(404).json({ message: "New operator not found" });
+      }
+
+      existing.operator = newOperatorId; // update operator
+    } else {
+      // Same operator, just adjust balance by delta
+      const delta = amount - existing.amount;
+      updatedOperator = await Operator.findByIdAndUpdate(
+        oldOperatorId,
+        { $inc: { balance: delta } },
+        { new: true, session }
+      );
+
+      if (!updatedOperator) {
+        return res.status(404).json({ message: "Operator not found" });
+      }
+    }
+
+    // 3️⃣ Update LoadHistory document
+    existing.amount = amount;
+    existing.date = date || existing.date;
+    existing.newBalance = updatedOperator.balance;
+
+    await existing.save({ session });
+
+    // 4️⃣ Update linked Transaction if exists
+    if (existing.transaction) {
+      await Transaction.findByIdAndUpdate(
+        existing.transaction,
+        {
+          amount: amount,
+          note: `অপারেটর ব্যালেন্স আপডেট করা হয়েছে`,
+        },
+        { session }
+      );
+    }
+
+    // 5️⃣ Commit transaction
+    await session.commitTransaction();
+    session.endSession();
+
+    res.status(200).json({
+      message: "Load history updated successfully",
+      data: existing,
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+
+    res.status(500).json({
+      message: "Error updating load history",
       error: error.message,
     });
   }

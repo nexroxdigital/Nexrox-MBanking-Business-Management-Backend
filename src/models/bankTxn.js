@@ -10,12 +10,12 @@ const bankTransactionSchema = new mongoose.Schema(
       type: String, // time string (HH:mm or similar) from frontend
       required: false,
     },
-    bank: {
+    senderBank: {
       type: String,
       required: true,
       trim: true,
     },
-    branch: {
+    senderBranch: {
       type: String,
       required: true,
       trim: true,
@@ -45,7 +45,7 @@ const bankTransactionSchema = new mongoose.Schema(
       required: false,
       trim: true,
     },
-    receiverBankBranch: {
+    receiverBranch: {
       type: String,
       required: false,
       trim: true,
@@ -68,6 +68,10 @@ const bankTransactionSchema = new mongoose.Schema(
       type: Number,
       required: false,
       default: 0,
+    },
+    type: {
+      type: String,
+      required: true,
     },
   },
   {

@@ -192,102 +192,160 @@ export const createBankTransaction = async (req, res) => {
     const {
       date,
       time,
-      bank,
-      branch = "",
       senderName,
+      senderBank,
+      senderBranch,
       senderAccount,
+
       receiverName,
-      receiverAccount,
       receiverBank,
-      receiverBankBranch,
+      receiverBranch,
+      receiverAccount,
       method,
       amount,
       fee,
       pay,
+      type = "send",
     } = req.body;
 
     console.log(req.body);
 
+    const amountNum = Number(amount) || 0;
+    const feeNum = Number(fee) || 0;
+    const payNum = Number(pay) || 0;
+
     // Validation
-    if (!bank || !senderName || !receiverName || !amount) {
+    if (
+      !senderBank ||
+      !senderName ||
+      !receiverName ||
+      !receiverBank ||
+      !amount
+    ) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    // Find the bank account
-    const bankDoc = await Bank.findOne({
-      accountNumber: senderAccount,
-    }).session(session);
+    let bankDoc;
+    let balanceChange = 0;
+    let transactionNote = "";
 
-    if (!bankDoc) {
+    // ============ SEND MONEY LOGIC ============
+    if (type === "send") {
+      // Find sender's bank account (your account)
+      bankDoc = await Bank.findOne({
+        accountNumber: senderAccount,
+      }).session(session);
+
+      if (!bankDoc) {
+        await session.abortTransaction();
+        session.endSession();
+        return res
+          .status(404)
+          .json({ message: "প্রেরকের অকাউন্ট পাওয়া যায়নি" });
+      }
+
+      // Calculate deduction
+      if (payNum) {
+        balanceChange = -payNum; // Subtract pay amount
+      } else if (feeNum) {
+        balanceChange = -(amountNum + feeNum); // Subtract amount + fee
+      } else {
+        balanceChange = -amountNum; // Subtract amount only
+      }
+
+      // Check if sufficient balance
+      if (bankDoc.balance < Math.abs(balanceChange)) {
+        await session.abortTransaction();
+        session.endSession();
+        return res
+          .status(400)
+          .json({ message: "ব্যাংক অকাউন্টে পর্যাপ্ত ব্যালেন্স নেই" });
+      }
+
+      transactionNote = `${amount} টাকা পাঠানো হয়েছে ${receiverName} কে`;
+    }
+    // ============ RECEIVE MONEY LOGIC ============
+    else if (type === "receive") {
+      // Find receiver's bank account (your account)
+      bankDoc = await Bank.findOne({
+        accountNumber: receiverAccount,
+      }).session(session);
+
+      if (!bankDoc) {
+        await session.abortTransaction();
+        session.endSession();
+        return res
+          .status(404)
+          .json({ message: "গ্রাহকের আকাউন্ট পাওয়া যায়নি" });
+      }
+
+      // Calculate addition
+      if (payNum) {
+        balanceChange = payNum; // Add pay amount
+      } else if (feeNum) {
+        balanceChange = amountNum - feeNum;
+      } else {
+        balanceChange = amountNum; // Add full amount
+      }
+
+      transactionNote = `${amount} টাকা গ্রহণ করা হয়েছে ${senderName} থেকে`;
+    }
+    // ============ INVALID TYPE ============
+    else {
       await session.abortTransaction();
       session.endSession();
-      return res.status(404).json({ message: "অকাউন্ট পাওয়া যায়নি" });
+      return res.status(400).json({ message: "Invalid transaction type" });
     }
 
-    // Calculate deduction
-    let deduction = 0;
-    if (pay) {
-      deduction = pay;
-    } else if (fee) {
-      deduction = amount + fee;
-    } else {
-      deduction = amount;
-    }
-
-    // Check balance
-    if (bankDoc.balance < deduction) {
-      await session.abortTransaction();
-      session.endSession();
-      return res
-        .status(400)
-        .json({ message: "ব্যাংক অকাউন্টে পর্যাপ্ত ব্যালেন্স নেই" });
-    }
-
-    //  Subtract from bank balance
-    bankDoc.balance -= deduction;
+    // Update bank balance
+    bankDoc.balance += balanceChange;
     await bankDoc.save({ session });
 
-    //  Save transaction
+    // Save bank transaction
     const txn = new BankTxn({
       date,
       time,
-      bank,
-      branch,
       senderName,
+      senderBank,
+      senderBranch,
       senderAccount,
       receiverName,
-      receiverAccount,
       receiverBank,
-      receiverBankBranch,
+      receiverBranch,
+      receiverAccount,
       method,
-      amount,
-      fee,
-      pay,
+      amount: amountNum,
+      fee: feeNum,
+      pay: payNum,
+      type,
     });
 
     await txn.save({ session });
 
-    // Save into Transaction collection also
+    // Save into general Transaction collection
     const generalTxn = new Transaction({
       type: "bank",
       amount,
-      note: `${amount} টাকা পাঠানো হয়েছে ${receiverName} কে`,
+      note: transactionNote,
       meta: {
-        bank,
-        branch,
         senderName,
+        senderBank,
+        senderBranch,
         senderAccount,
         receiverName,
+        receiverBank,
+        receiverBranch,
         receiverAccount,
         fee,
         pay,
+        transactionType: type,
         bankTxnId: txn._id,
       },
     });
 
     await generalTxn.save({ session });
 
-    //  Commit transaction
+    // Commit transaction
     await session.commitTransaction();
     session.endSession();
 
@@ -347,13 +405,16 @@ export const getBankTransactions = async (req, res) => {
 // delete bank transaction
 export const deleteBankTxn = async (req, res) => {
   const session = await mongoose.startSession();
-  session.startTransaction();
 
   try {
-    const { id } = req.params; // Transaction ID from URL params
+    session.startTransaction();
+    const { id } = req.params;
+
+    console.log(id);
 
     // Find the bank transaction
     const bankTxn = await BankTxn.findById(id).session(session);
+    // console.log(bankTxn);
 
     if (!bankTxn) {
       await session.abortTransaction();
@@ -363,7 +424,10 @@ export const deleteBankTxn = async (req, res) => {
 
     // Find the bank account
     const bankDoc = await Bank.findOne({
-      accountNumber: bankTxn.senderAccount,
+      accountNumber:
+        bankTxn.type === "send"
+          ? bankTxn.senderAccount
+          : bankTxn.receiverAccount,
     }).session(session);
 
     if (!bankDoc) {
@@ -373,17 +437,37 @@ export const deleteBankTxn = async (req, res) => {
     }
 
     // Calculate the amount to restore (same logic as deduction in create)
-    let amountToRestore = 0;
-    if (bankTxn.pay) {
-      amountToRestore = bankTxn.pay;
-    } else if (bankTxn.fee) {
-      amountToRestore = bankTxn.amount + bankTxn.fee;
-    } else {
-      amountToRestore = bankTxn.amount;
+
+    const amountNum = Number(bankTxn.amount) || 0;
+    const feeNum = Number(bankTxn.fee) || 0;
+    const payNum = Number(bankTxn.pay) || 0;
+
+    let balanceChange = 0;
+
+    // ============ SEND MONEY DELETE LOGIC ============
+    if (bankTxn.type === "send") {
+      if (payNum) {
+        balanceChange = +payNum; // Add back pay
+      } else if (feeNum) {
+        balanceChange = +(amountNum + feeNum); // Add back amount + fee
+      } else {
+        balanceChange = +amountNum; // Add back amount only
+      }
+    }
+
+    // ============ RECEIVE MONEY DELETE LOGIC ============
+    else if (bankTxn.type === "receive") {
+      if (payNum) {
+        balanceChange = -payNum; // Subtract received pay
+      } else if (feeNum) {
+        balanceChange = -(amountNum - feeNum); // Subtract amount - fee
+      } else {
+        balanceChange = -amountNum; // Subtract full amount
+      }
     }
 
     // Restore the bank balance
-    bankDoc.balance += amountToRestore;
+    bankDoc.balance += balanceChange;
     await bankDoc.save({ session });
 
     // Delete the related general Transaction record
@@ -397,36 +481,40 @@ export const deleteBankTxn = async (req, res) => {
 
     // Commit transaction
     await session.commitTransaction();
-    session.endSession();
+
+    console.log("data deelted");
 
     res.status(200).json({
       message:
         "লেনদেন সফলভাবে মুছে ফেলা হয়েছে এবং ব্যাংক ব্যালেন্স পুনরুদ্ধার করা হয়েছে",
       deletedBankTxn: bankTxn,
-      restoredAmount: amountToRestore,
+      restoredAmount: balanceChange,
       updatedBank: bankDoc,
     });
   } catch (error) {
-    await session.abortTransaction();
-    session.endSession();
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
     res.status(500).json({
       message: "লেনদেন মুছতে সমস্যা হয়েছে",
       error: error.message,
     });
   } finally {
-    session.endSession();
+    await session.endSession();
   }
 };
 
 // edit bank transaction
+
 export const editBankTransaction = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
     const { id: txnId } = req.params;
-    // Transaction ID from URL
-    const updates = req.body; // Updated transaction data from client
+    const updates = req.body;
+
+    console.log("Editing transaction:", req.body);
 
     // 1️⃣ Find the original transaction
     const originalTxn = await BankTxn.findById(txnId).session(session);
@@ -436,10 +524,45 @@ export const editBankTransaction = async (req, res) => {
       return res.status(404).json({ message: "Transaction not found" });
     }
 
-    // 2️⃣ Get original sender account and its bank document
+    // Determine transaction type (use updated type or keep original)
+    const transactionType = updates.type || originalTxn.type;
+
+    // 2️⃣ REVERSE THE ORIGINAL TRANSACTION
+    const originalAmountNum = Number(originalTxn.amount) || 0;
+    const originalFeeNum = Number(originalTxn.fee) || 0;
+    const originalPayNum = Number(originalTxn.pay) || 0;
+
+    let originalBalanceChange = 0;
+
+    // Reverse the original transaction based on its type
+    if (originalTxn.type === "send") {
+      if (originalPayNum) {
+        originalBalanceChange = +originalPayNum; // Add back pay
+      } else if (originalFeeNum) {
+        originalBalanceChange = +(originalAmountNum + originalFeeNum); // Add back amount + fee
+      } else {
+        originalBalanceChange = +originalAmountNum; // Add back amount only
+      }
+    } else if (originalTxn.type === "receive") {
+      if (originalPayNum) {
+        originalBalanceChange = -originalPayNum; // Subtract received pay
+      } else if (originalFeeNum) {
+        originalBalanceChange = -(originalAmountNum - originalFeeNum); // Subtract amount - fee
+      } else {
+        originalBalanceChange = -originalAmountNum; // Subtract full amount
+      }
+    }
+
+    // Find original bank account based on original transaction type
+    const originalAccountNumber =
+      originalTxn.type === "send"
+        ? originalTxn.senderAccount
+        : originalTxn.receiverAccount;
+
     const oldBankDoc = await Bank.findOne({
-      accountNumber: originalTxn.senderAccount,
+      accountNumber: originalAccountNumber,
     }).session(session);
+
     if (!oldBankDoc) {
       await session.abortTransaction();
       session.endSession();
@@ -448,112 +571,163 @@ export const editBankTransaction = async (req, res) => {
         .json({ message: "Original bank account not found" });
     }
 
-    // 3️⃣ Undo the old transaction’s deduction from old account balance
-    const oldDeduction =
-      originalTxn.pay ||
-      (originalTxn.fee
-        ? originalTxn.amount + originalTxn.fee
-        : originalTxn.amount);
-
-    oldBankDoc.balance += oldDeduction;
+    // Reverse original transaction from OLD bank
+    oldBankDoc.balance += originalBalanceChange;
     await oldBankDoc.save({ session });
 
-    // 4️⃣ Determine the new sender account (could be same or changed)
-    const newSenderAccount = updates.senderAccount || originalTxn.senderAccount;
+    // 3️⃣ APPLY THE UPDATED TRANSACTION
+    const newAmount = Number(updates.amount ?? originalTxn.amount) || 0;
+    const newFee = Number(updates.fee ?? originalTxn.fee) || 0;
+    const newPay = Number(updates.pay ?? originalTxn.pay) || 0;
 
-    // 5️⃣ Fetch the new sender’s bank document
-    const newBankDoc = await Bank.findOne({
-      accountNumber: newSenderAccount,
-    }).session(session);
+    let newBalanceChange = 0;
+    let transactionNote = "";
 
-    if (!newBankDoc) {
-      await session.abortTransaction();
-      session.endSession();
-      return res
-        .status(404)
-        .json({ message: "New sender bank account not found" });
+    // Determine which bank account to use for UPDATED transaction
+    let newAccountNumber;
+    if (transactionType === "send") {
+      newAccountNumber = updates.senderAccount || originalTxn.senderAccount;
+      transactionNote = `${newAmount} টাকা পাঠানো হয়েছে ${
+        updates.receiverName || originalTxn.receiverName
+      } কে`;
+    } else {
+      newAccountNumber = updates.receiverAccount || originalTxn.receiverAccount;
+      transactionNote = `${newAmount} টাকা গ্রহণ করা হয়েছে ${
+        updates.senderName || originalTxn.senderName
+      } থেকে`;
     }
 
-    // 6️⃣ Calculate new deduction amount (based on updated fields)
-    const newAmount = updates.amount ?? originalTxn.amount;
-    const newFee = updates.fee ?? originalTxn.fee ?? 0;
-    const newPay = updates.pay ?? originalTxn.pay ?? 0;
+    // Calculate new balance change based on UPDATED transaction type
+    if (transactionType === "send") {
+      if (newPay) {
+        newBalanceChange = -newPay;
+      } else if (newFee) {
+        newBalanceChange = -(newAmount + newFee);
+      } else {
+        newBalanceChange = -newAmount;
+      }
+    } else {
+      if (newPay) {
+        newBalanceChange = newPay;
+      } else if (newFee) {
+        newBalanceChange = newAmount - newFee;
+      } else {
+        newBalanceChange = newAmount;
+      }
+    }
 
-    let newDeduction = 0;
-    if (newPay) newDeduction = newPay;
-    else if (newFee) newDeduction = newAmount + newFee;
-    else newDeduction = newAmount;
+    // Find the NEW bank account for updated transaction
+    let newBankDoc;
+    if (newAccountNumber === originalAccountNumber) {
+      // Same bank account
+      newBankDoc = oldBankDoc;
+    } else {
+      // Different bank account - find the new one
+      newBankDoc = await Bank.findOne({
+        accountNumber: newAccountNumber,
+      }).session(session);
 
-    // 7️⃣ Check if new account has enough balance
-    if (newBankDoc.balance < newDeduction) {
+      if (!newBankDoc) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(404).json({ message: "New bank account not found" });
+      }
+    }
+
+    // Check if sufficient balance for send transactions
+    if (
+      transactionType === "send" &&
+      newBankDoc.balance < Math.abs(newBalanceChange)
+    ) {
       await session.abortTransaction();
       session.endSession();
       return res
         .status(400)
-        .json({ message: "Insufficient balance in new sender account" });
+        .json({ message: "Insufficient balance in bank account" });
     }
 
-    // 8️⃣ Deduct new transaction amount from new bank account
-    newBankDoc.balance -= newDeduction;
+    // Apply new transaction to NEW bank
+    // If same account, this will correctly adjust the balance after the reversal
+    newBankDoc.balance += newBalanceChange;
     await newBankDoc.save({ session });
 
-    // 9️⃣ Update the transaction fields
-    for (let key in updates) {
-      if (updates[key] !== undefined) {
-        originalTxn[key] = updates[key];
-      }
-    }
+    // 4️⃣ UPDATE THE BANK TRANSACTION
+    const updateFields = {
+      date: updates.date || originalTxn.date,
+      time: updates.time || originalTxn.time,
+      senderName: updates.senderName || originalTxn.senderName,
+      senderBank: updates.senderBank || originalTxn.senderBank,
+      senderBranch: updates.senderBranch || originalTxn.senderBranch,
+      senderAccount: updates.senderAccount || originalTxn.senderAccount,
+      receiverName: updates.receiverName || originalTxn.receiverName,
+      receiverBank: updates.receiverBank || originalTxn.receiverBank,
+      receiverBranch: updates.receiverBranch || originalTxn.receiverBranch,
+      receiverAccount: updates.receiverAccount || originalTxn.receiverAccount,
+      method: updates.method || originalTxn.method,
+      amount: newAmount,
+      fee: newFee,
+      pay: newPay,
+      type: transactionType,
+    };
 
-    await originalTxn.save({ session });
+    const updatedTxn = await BankTxn.findByIdAndUpdate(txnId, updateFields, {
+      session,
+      new: true,
+    });
 
-    // 🔟 Update the related general Transaction document (if exists)
-    let generalTxn = null;
-
-    if (mongoose.Types.ObjectId.isValid(txnId)) {
-      generalTxn = await Transaction.findOne({
-        "meta.bankTxnId": new mongoose.Types.ObjectId(txnId),
-      }).session(session);
-    }
-
-    // console.log("general", generalTxn);
+    // 5️⃣ UPDATE THE GENERAL TRANSACTION
+    const generalTxn = await Transaction.findOne({
+      "meta.bankTxnId": txnId,
+    }).session(session);
 
     if (generalTxn) {
       generalTxn.amount = newAmount;
-      generalTxn.note = `${newAmount} টাকা পাঠানো হয়েছে ${
-        updates.receiverName ?? originalTxn.receiverName
-      } কে`;
-
+      generalTxn.note = transactionNote;
       generalTxn.meta = {
         ...generalTxn.meta,
-        ...updates,
-        bankTxnId: originalTxn._id,
+        ...updateFields,
+        bankTxnId: txnId,
       };
 
       await generalTxn.save({ session });
     }
 
-    // 11️⃣ Commit transaction
+    // 6️⃣ COMMIT TRANSACTION
     await session.commitTransaction();
-    session.endSession();
+    await session.endSession();
 
-    // 12️⃣ Send response
-    res.status(200).json({
+    // Prepare response
+    const response = {
       message: "Transaction updated successfully",
-      updatedTransaction: originalTxn,
-      updatedBank:
-        newSenderAccount === originalTxn.senderAccount
-          ? newBankDoc
-          : { oldBank: oldBankDoc, newBank: newBankDoc },
-    });
+      updatedTransaction: updatedTxn,
+      bankUpdates: {
+        transactionType,
+        originalAccount: {
+          accountNumber: originalAccountNumber,
+          balance: oldBankDoc.balance,
+        },
+        updatedAccount: {
+          accountNumber: newAccountNumber,
+          balance: newBankDoc.balance,
+        },
+      },
+    };
+
+    // If bank account changed, include both old and new
+    if (newAccountNumber !== originalAccountNumber) {
+      response.bankUpdates.oldAccount = {
+        accountNumber: originalAccountNumber,
+        balance: oldBankDoc.balance,
+      };
+    }
+
+    res.status(200).json(response);
   } catch (error) {
-    // Rollback if any error occurs
     await session.abortTransaction();
-    session.endSession();
+    await session.endSession();
     res.status(500).json({
       message: "Error updating bank transaction",
       error: error.message,
     });
-  } finally {
-    session.endSession();
   }
 };

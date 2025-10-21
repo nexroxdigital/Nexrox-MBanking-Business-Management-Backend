@@ -28,6 +28,11 @@ const bankSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  type: {
+    type: String,
+    enum: ["send", "receive"],
+    default: "send",
+  },
 });
 
 const Bank = mongoose.model("Bank", bankSchema);

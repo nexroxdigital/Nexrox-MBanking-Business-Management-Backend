@@ -3,9 +3,12 @@ import {
   adjustOperatorBalance,
   createOperator,
   createRecharge,
+  deleteLoadHistory,
   deleteOperator,
   deleteRechargeTxn,
+  editLoadHistory,
   editRechargeTransaction,
+  getLoadHistory,
   getOperators,
   getRechargeRecords,
   updateOperator,
@@ -33,6 +36,25 @@ router.patch(
   verifyToken,
   verifyAdmin,
   adjustOperatorBalance
+);
+
+// get all load histories
+router.get("/load-history", verifyToken, verifyAdmin, getLoadHistory);
+
+// delete load history
+router.delete(
+  "/load-history/delete/:id",
+  verifyToken,
+  verifyAdmin,
+  deleteLoadHistory
+);
+
+// edit load history
+router.patch(
+  "/load-history/edit/:id",
+  verifyToken,
+  verifyAdmin,
+  editLoadHistory
 );
 
 // recharge routes
