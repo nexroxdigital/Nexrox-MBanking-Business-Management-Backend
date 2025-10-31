@@ -30,11 +30,17 @@ export const createDailyTransaction = async (req, res) => {
       bill_type,
       isSendMessage,
       message,
+      payment_method,
+      meter_number,
+      customer_number,
+      customer_name,
+      bill_fee,
     } = req.body;
 
     // console.log(req.body);
+    let paymentMethod = payment_method === "" ? null : payment_method;
 
-    // 1. Handle Wallet update
+    //  Handle Wallet update
     let walletDoc = null;
     if (wallet_id) {
       walletDoc = await WalletNumber.findById(wallet_id).session(session);
@@ -64,7 +70,7 @@ export const createDailyTransaction = async (req, res) => {
       await walletDoc.save({ session });
     }
 
-    //  2. Handle Client update
+    //  Handle Client update
     let clientDoc = null;
     if (client_id) {
       clientDoc = await Client.findById(client_id).session(session);
@@ -76,14 +82,16 @@ export const createDailyTransaction = async (req, res) => {
         // Increase totalSale by total
         if (
           type.toLowerCase() === "cash in" ||
-          type.toLowerCase() === "send money"
+          type.toLowerCase() === "send money" ||
+          type.toLowerCase() === "payment in"
         ) {
           clientDoc.totalSale += total;
           // Increase paid by (total - newDue)
           clientDoc.paid += total - due;
         } else if (
           type.toLowerCase() === "receive money" ||
-          type.toLowerCase() === "cash out"
+          type.toLowerCase() === "cash out" ||
+          type.toLowerCase() === "payment out"
         ) {
           clientDoc.totalSale += amount;
           // Increase paid by (amount - newDue)
@@ -103,7 +111,30 @@ export const createDailyTransaction = async (req, res) => {
       }
     }
 
-    // 4. Save Transaction
+    // Handle Bill Payment wallet updates
+    if (channel === "Bill Payment" && paymentMethod) {
+      const billWallet = await WalletNumber.findById(paymentMethod).session(
+        session
+      );
+      if (!billWallet) throw new Error("Bill payment wallet not found");
+
+      // Check balance
+      if (billWallet.balance < amount) {
+        throw new Error("insufficient wallet balance for bill payment");
+      }
+
+      // Subtract the bill payment amount
+      billWallet.balance -= amount;
+
+      // Add profit (if any)
+      // if (profit > 0) {
+      //   billWallet.balance += profit;
+      // }
+
+      await billWallet.save({ session });
+    }
+
+    //  Save Transaction
     let clientNumber = clientDoc ? clientDoc.phone : number || null;
     let walletNumber = walletDoc ? walletDoc.number : null;
 
@@ -111,8 +142,17 @@ export const createDailyTransaction = async (req, res) => {
 
     if (note) {
       shortNote = note;
-    } else if (bill_type) {
-      shortNote = `${total} টাকা ${bill_type} করা হয়েছে`;
+    } else if (bill_type && channel === "Bill Payment") {
+      shortNote = `${amount} টাকা ${bill_type} বিল প্রদান করা হয়েছে।`;
+      if (customer_name) {
+        shortNote += `\nগ্রাহক: ${customer_name}`;
+      }
+      if (meter_number) {
+        shortNote += `\nমিটার: ${meter_number}`;
+      }
+      if (customer_number) {
+        shortNote += `\nকাস্টমার নম্বর: ${customer_number}`;
+      }
     } else if (type === "Cash Out") {
       if (walletDoc?.type.toLowerCase() === "agent") {
         shortNote = `${amount} টাকা ${type} করা হয়েছে ${walletDoc?.label} -এ`;
@@ -134,7 +174,7 @@ export const createDailyTransaction = async (req, res) => {
         clientNumber ? `এই নাম্বারে ${clientNumber}` : ""
       }`;
     } else if (type.toLowerCase() === "cash") {
-      shortNote = `৳{clientDoc?.name} কে ${amount} টাকা দেওয়া হয়েছে।`;
+      shortNote = `${clientDoc?.name} কে ${amount} টাকা দেওয়া হয়েছে।`;
     }
 
     const txn = new Transaction({
@@ -149,7 +189,7 @@ export const createDailyTransaction = async (req, res) => {
 
     await txn.save({ session });
 
-    //  3. Save DailyTransaction
+    //  Save DailyTransaction
     const dailyTxn = new DailyTransaction({
       date,
       channel,
@@ -170,18 +210,16 @@ export const createDailyTransaction = async (req, res) => {
       bill_type,
       wallet_balance: walletDoc ? walletDoc.balance : null,
       transaction_id: txn._id,
+      payment_method: paymentMethod,
+      meter_number,
+      customer_number,
+      customer_name,
+      bill_fee,
     });
 
     await dailyTxn.save({ session });
 
-    // let txnAmount = 0;
-    // if (type === "Cash Out") txnAmount = total;
-    // else if (type === "Cash In") txnAmount = amount;
-    // else if (type.toLowerCase() === "receive money") txnAmount = total;
-    // else if (type.toLowerCase() === "send money") txnAmount = amount;
-    // else txnAmount = amount;
-
-    //  5. Send SMS if needed
+    //   Send SMS if needed
     if (isSendMessage && clientNumber) {
       const smsText = message && message.trim() !== "" ? message : shortNote;
       await sendSMS(clientNumber, smsText);
@@ -217,31 +255,68 @@ export const createDailyTransaction = async (req, res) => {
 // get all transactions with pagination
 export const getDailyTransactions = async (req, res) => {
   try {
-    let { page = 1, limit = 10 } = req.query;
+    let {
+      page = 1,
+      limit = 10,
+      search = "",
+      label = "",
+      type = "",
+    } = req.query;
 
     page = parseInt(page);
     limit = parseInt(limit);
 
     const skip = (page - 1) * limit;
 
+    let searchQuery = {};
+    if (search && search.trim() !== "") {
+      searchQuery.$or = [
+        { type: { $regex: search, $options: "i" } },
+        { client_name: { $regex: search, $options: "i" } },
+        { number: { $regex: search, $options: "i" } },
+        { txn_id: { $regex: search, $options: "i" } },
+        { channel: { $regex: search, $options: "i" } },
+        { note: { $regex: search, $options: "i" } },
+        { bill_type: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    // Filter by type
+    if (type && type.trim() !== "") {
+      searchQuery.type = type;
+    }
+
     // Fetch transactions with pagination
-    const transactions = await DailyTransaction.find()
+    const transactions = await DailyTransaction.find(searchQuery)
       .populate("client_id", "name phone")
-      .populate("wallet_id", "label number channel type") // if you want client info
-      .sort({ createdAt: -1 }) // latest first
+      .populate("wallet_id", "label number channel type")
+      .populate("payment_method", "label number channel type")
+      .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
 
+    // Filter by wallet label (after populate since label is in wallet_id)
+    let filteredTransactions = transactions;
+    if (label && label.trim() !== "") {
+      filteredTransactions = transactions.filter(
+        (txn) => txn.wallet_id?.label === label
+      );
+    }
+
     // Count total
-    const totalTxns = await DailyTransaction.countDocuments();
+    const totalTxns = await DailyTransaction.countDocuments(searchQuery);
+
+    // Adjust total if label filter is applied (approximate)
+    const adjustedTotal =
+      label && label.trim() !== "" ? filteredTransactions.length : totalTxns;
 
     res.status(200).json({
       data: transactions,
       pagination: {
-        total: totalTxns,
+        total: adjustedTotal,
         page,
         limit,
-        totalPages: Math.ceil(totalTxns / limit),
+        totalPages: Math.ceil(adjustedTotal / limit),
       },
     });
   } catch (error) {
@@ -360,6 +435,19 @@ export const deleteDailyTransaction = async (req, res) => {
       }
     }
 
+    if (dailyTxn.channel === "Bill Payment" && dailyTxn.payment_method) {
+      const billWallet = await WalletNumber.findById(
+        dailyTxn.payment_method
+      ).session(session);
+      if (billWallet) {
+        // Reverse the deduction: add back the amount
+        billWallet.balance += dailyTxn.amount;
+        // Reverse the profit: subtract it
+        billWallet.balance -= dailyTxn.profit || 0;
+        await billWallet.save({ session });
+      }
+    }
+
     // 3. Revert Client changes
     if (dailyTxn.client_id) {
       const client = await Client.findById(dailyTxn.client_id).session(session);
@@ -433,6 +521,8 @@ export const editDailyTransaction = async (req, res) => {
       total: existingDailyTxn.total,
       profit: existingDailyTxn.profit,
       due: existingDailyTxn.due,
+      payment_method: existingDailyTxn.payment_method,
+      channel: existingDailyTxn.channel,
     };
 
     // Prepare new values (use existing if not provided)
@@ -456,6 +546,8 @@ export const editDailyTransaction = async (req, res) => {
       bill_type: updateData.bill_type ?? existingDailyTxn.bill_type,
       isSendMessage: updateData.isSendMessage,
       message: updateData.message,
+      payment_method:
+        updateData.payment_method ?? existingDailyTxn.payment_method,
     };
 
     // Step 2: Reverse old wallet effects
@@ -506,6 +598,19 @@ export const editDailyTransaction = async (req, res) => {
           oldClient.due -= oldData.amount;
         }
         await oldClient.save({ session });
+      }
+    }
+
+    if (oldData.channel === "Bill Payment" && oldData.payment_method) {
+      const oldBillWallet = await WalletNumber.findById(
+        oldData.payment_method
+      ).session(session);
+      if (oldBillWallet) {
+        // Reverse the deduction: add back the amount
+        oldBillWallet.balance += oldData.amount;
+        // Reverse the profit: subtract it
+        oldBillWallet.balance -= oldData.profit || 0;
+        await oldBillWallet.save({ session });
       }
     }
 
@@ -568,6 +673,30 @@ export const editDailyTransaction = async (req, res) => {
       }
 
       await newClientDoc.save({ session });
+    }
+
+    if (newData.channel === "Bill Payment" && newData.payment_method) {
+      const newBillWallet = await WalletNumber.findById(
+        newData.payment_method
+      ).session(session);
+      if (!newBillWallet) {
+        throw new Error("Bill payment wallet not found");
+      }
+
+      // Check balance
+      if (newBillWallet.balance < newData.amount) {
+        throw new Error("insufficient wallet balance for bill payment");
+      }
+
+      // Subtract the bill payment amount
+      newBillWallet.balance -= newData.amount;
+
+      // Add profit (if any)
+      if (newData.profit > 0) {
+        newBillWallet.balance += newData.profit;
+      }
+
+      await newBillWallet.save({ session });
     }
 
     // Step 6: Generate new short note
@@ -634,6 +763,7 @@ export const editDailyTransaction = async (req, res) => {
     existingDailyTxn.wallet_balance = newWalletDoc
       ? newWalletDoc.balance
       : null;
+    existingDailyTxn.payment_method = newData.payment_method;
 
     await existingDailyTxn.save({ session });
 

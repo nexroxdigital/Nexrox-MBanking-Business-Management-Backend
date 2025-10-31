@@ -11,6 +11,7 @@ import {
   getLoadHistory,
   getOperators,
   getRechargeRecords,
+  getTotalOperatorBalance,
   updateOperator,
 } from "../controllers/operatorController.js";
 import { verifyAdmin } from "../middleware/verifyAdmin.js";
@@ -24,10 +25,13 @@ router.post("/create", verifyToken, verifyAdmin, createOperator);
 // GET: fetch all operators
 router.get("/", verifyToken, verifyAdmin, getOperators);
 
-// DELETE: remove an operator by ID
+// get total balance
+router.get("/total-balance", getTotalOperatorBalance);
+
+// remove an operator by ID
 router.delete("/delete/:id", verifyToken, verifyAdmin, deleteOperator);
 
-// PUT: update an operator by ID
+// update an operator by ID
 router.put("/update/:id", verifyToken, verifyAdmin, updateOperator);
 
 // PATCH: adjust operator balance (increase or decrease)

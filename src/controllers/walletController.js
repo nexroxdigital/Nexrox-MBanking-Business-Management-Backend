@@ -183,3 +183,31 @@ export const addWalletBalance = async (req, res) => {
     });
   }
 };
+
+// Get total balance from all wallet numbers
+export const getTotalWalletBalance = async (req, res) => {
+  try {
+    const result = await WalletNumber.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalBalance: { $sum: "$balance" },
+        },
+      },
+    ]);
+
+    const totalBalance = result.length > 0 ? result[0].totalBalance : 0;
+
+    res.status(200).json({
+      message: "Total wallet balance fetched successfully",
+      data: {
+        totalBalance,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Error fetching total wallet balance",
+      error: error.message,
+    });
+  }
+};

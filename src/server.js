@@ -5,7 +5,7 @@ import express from "express";
 import connectDB from "./config/db.js";
 
 // routes
-import loginUser from "./routes/authRoutes.js";
+import authRoutes from "./routes/authRoutes.js";
 import bankRoutes from "./routes/bankRoutes.js";
 import clientRoutes from "./routes/clientRoutes.js";
 import dailyTxnRoutes from "./routes/dailyTxnRoutes.js";
@@ -28,7 +28,7 @@ app.use(express.urlencoded({ extended: true }));
 connectDB();
 
 // Routes for wallet
-app.use("/api/auth", loginUser);
+app.use("/api/auth", authRoutes);
 app.use("/api/wallet", walletRoutes);
 app.use("/api/operator", operatorRoutes);
 app.use("/api/bank", bankRoutes);

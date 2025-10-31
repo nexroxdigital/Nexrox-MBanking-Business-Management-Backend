@@ -79,10 +79,37 @@ const dailyTransactionSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    payment_method: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "WalletNumber",
+      required: false,
+      default: null,
+    },
     transaction_id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Transaction",
       required: true,
+    },
+    wallet_balance: {
+      type: Number,
+      required: false,
+      default: null,
+    },
+    meter_number: {
+      type: String,
+      trim: true,
+    },
+    customer_number: {
+      type: String,
+      trim: true,
+    },
+    customer_name: {
+      type: String,
+      trim: true,
+    },
+    bill_fee: {
+      type: Number,
+      default: 0,
     },
   },
 

@@ -8,6 +8,7 @@ import {
   editBankTransaction,
   getBanks,
   getBankTransactions,
+  getTotalBankBalance,
   updateBank,
 } from "../controllers/bankController.js";
 import { verifyAdmin } from "../middleware/verifyAdmin.js";
@@ -61,5 +62,9 @@ router.put(
   verifyAdmin,
   editBankTransaction
 );
+
+// get total balance
+
+router.get("/total-balance", getTotalBankBalance);
 
 export default router;

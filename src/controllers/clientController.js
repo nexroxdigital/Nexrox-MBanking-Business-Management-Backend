@@ -164,6 +164,10 @@ export const adjustClientPayment = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
+  console.log("body for adjust pay", req.body.amount);
+  console.log("body for adjust pay", typeof req.body.amount);
+  console.log("id param", req.params.id);
+
   try {
     const { id } = req.params;
     const { amount, isSendMessage, message } = req.body;
@@ -185,7 +189,7 @@ export const adjustClientPayment = async (req, res) => {
     }
 
     // if amount is greater than due, return error
-    if (amount > client.due) {
+    if (amount > client.due) { 
       return res.status(400).json({ message: "Amount is greater than due" });
     }
 

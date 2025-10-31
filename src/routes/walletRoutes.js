@@ -4,6 +4,7 @@ import {
   createWalletNumber,
   deleteWalletNumber,
   editWalletNumber,
+  getTotalWalletBalance,
   getWalletNumbers,
 } from "../controllers/walletController.js";
 import { verifyAdmin } from "../middleware/verifyAdmin.js";
@@ -16,6 +17,9 @@ router.post("/create", verifyToken, verifyAdmin, createWalletNumber);
 
 // GET: get all wallet numbers
 router.get("/", verifyToken, verifyAdmin, getWalletNumbers);
+
+// get total balance
+router.get("/total-balance", getTotalWalletBalance);
 
 // DELETE: remove a wallet number by ID
 router.delete("/delete/:id", verifyToken, verifyAdmin, deleteWalletNumber);

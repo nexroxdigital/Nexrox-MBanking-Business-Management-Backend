@@ -472,7 +472,7 @@ export const deleteBankTxn = async (req, res) => {
 
     // Delete the related general Transaction record
     const deletedGeneralTxn = await Transaction.findOneAndDelete(
-      { "meta.bankTxnId": bankTxn._id },
+      { "meta.bankTxnId": new mongoose.Types.ObjectId(bankTxn._id) },
       { session }
     );
 
@@ -514,7 +514,7 @@ export const editBankTransaction = async (req, res) => {
     const { id: txnId } = req.params;
     const updates = req.body;
 
-    console.log("Editing transaction:", req.body);
+    // console.log("Editing transaction:", req.body);
 
     // 1️⃣ Find the original transaction
     const originalTxn = await BankTxn.findById(txnId).session(session);
@@ -677,8 +677,10 @@ export const editBankTransaction = async (req, res) => {
 
     // 5️⃣ UPDATE THE GENERAL TRANSACTION
     const generalTxn = await Transaction.findOne({
-      "meta.bankTxnId": txnId,
+      "meta.bankTxnId": new mongoose.Types.ObjectId(txnId),
     }).session(session);
+
+    console.log("general tnx", generalTxn);
 
     if (generalTxn) {
       generalTxn.amount = newAmount;
@@ -727,6 +729,34 @@ export const editBankTransaction = async (req, res) => {
     await session.endSession();
     res.status(500).json({
       message: "Error updating bank transaction",
+      error: error.message,
+    });
+  }
+};
+
+// Get total balance from all bank accounts
+export const getTotalBankBalance = async (req, res) => {
+  try {
+    const result = await Bank.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalBalance: { $sum: "$balance" },
+        },
+      },
+    ]);
+
+    const totalBalance = result.length > 0 ? result[0].totalBalance : 0;
+
+    res.status(200).json({
+      message: "Total bank balance fetched successfully",
+      data: {
+        totalBalance,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Error fetching total bank balance",
       error: error.message,
     });
   }

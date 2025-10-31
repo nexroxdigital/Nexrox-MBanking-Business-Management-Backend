@@ -448,8 +448,6 @@ export const editRechargeTransaction = async (req, res) => {
   }
 };
 
-// get load history controller with pagination
-
 export const getLoadHistory = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -541,78 +539,6 @@ export const deleteLoadHistory = async (req, res) => {
 };
 
 // edit laod history
-
-// export const editLoadHistory = async (req, res) => {
-//   const session = await mongoose.startSession();
-//   session.startTransaction();
-
-//   try {
-//     const { id } = req.params; // LoadHistory document ID
-//     const { amount, date, operator } = req.body; // New amount and optional date
-
-//     if (amount === undefined || typeof amount !== "number") {
-//       return res.status(400).json({ message: "Amount must be a number" });
-//     }
-
-//     // 1️⃣ Find existing LoadHistory
-//     const existing = await LoadHistory.findById(id).session(session);
-//     if (!existing) {
-//       return res.status(404).json({ message: "Load history not found" });
-//     }
-
-//     // 2️⃣ Calculate delta: difference between new and old amount
-//     // Positive delta → increase operator balance
-//     // Negative delta → decrease operator balance
-//     const delta = amount - existing.amount;
-
-//     // 3️⃣ Update operator balance by delta
-//     const updatedOperator = await Operator.findByIdAndUpdate(
-//       existing.operator,
-//       { $inc: { balance: delta } },
-//       { new: true, runValidators: true, session }
-//     );
-
-//     if (!updatedOperator) {
-//       return res.status(404).json({ message: "Operator not found" });
-//     }
-
-//     // 4️⃣ Update LoadHistory document with new amount, date, and new operator balance
-//     existing.amount = amount;
-//     existing.date = date || existing.date;
-//     existing.newBalance = updatedOperator.balance;
-
-//     await existing.save({ session });
-
-//     if (existing.transaction) {
-//       await Transaction.findByIdAndUpdate(
-//         existing.transaction,
-//         {
-//           amount: amount,
-//           note: `অপারেটর ব্যালেন্স আপডেট করা হয়েছে`,
-//         },
-//         { session }
-//       );
-//     }
-
-//     // 5️⃣ Commit transaction
-//     await session.commitTransaction();
-//     session.endSession();
-
-//     res.status(200).json({
-//       message: "Load history updated successfully",
-//       data: existing,
-//     });
-//   } catch (error) {
-//     await session.abortTransaction();
-//     session.endSession();
-
-//     res.status(500).json({
-//       message: "Error updating load history",
-//       error: error.message,
-//     });
-//   }
-// };
-
 export const editLoadHistory = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -708,6 +634,34 @@ export const editLoadHistory = async (req, res) => {
 
     res.status(500).json({
       message: "Error updating load history",
+      error: error.message,
+    });
+  }
+};
+
+// Get total balance from all operators
+export const getTotalOperatorBalance = async (req, res) => {
+  try {
+    const result = await Operator.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalBalance: { $sum: "$balance" },
+        },
+      },
+    ]);
+
+    const totalBalance = result.length > 0 ? result[0].totalBalance : 0;
+
+    res.status(200).json({
+      message: "Total operator balance fetched successfully",
+      data: {
+        totalBalance,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Error fetching total operator balance",
       error: error.message,
     });
   }
